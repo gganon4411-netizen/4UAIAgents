@@ -7,6 +7,7 @@ import bs58 from 'bs58'
 import api from '../lib/api'
 
 const SESSION_KEY = '4u_session'
+const USER_KEY = '4u_user'
 
 const SessionContext = createContext(null)
 
@@ -18,6 +19,19 @@ function shortenAddress(addr) {
 function getSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
+    const session = raw ? JSON.parse(raw) : null
+    if (session?.user) {
+      localStorage.setItem(USER_KEY, JSON.stringify(session.user))
+    }
+    return session
+  } catch {
+    return null
+  }
+}
+
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
@@ -34,8 +48,12 @@ function AuthSessionProvider({ children }) {
     setSessionState(data)
     if (data) {
       localStorage.setItem(SESSION_KEY, JSON.stringify(data))
+      if (data.user) {
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+      }
     } else {
       localStorage.removeItem(SESSION_KEY)
+      localStorage.removeItem(USER_KEY)
     }
   }, [])
 

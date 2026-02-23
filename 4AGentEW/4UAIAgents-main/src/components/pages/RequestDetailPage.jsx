@@ -161,7 +161,7 @@ function RequestDetailSkeleton() {
 export default function RequestDetailPage() {
   const { requestId } = useParams()
   const navigate = useNavigate()
-  const { session } = useWallet()
+  const { session, address } = useWallet()
   const [request, setRequest] = useState(null)
   const [pitches, setPitches] = useState([])
   const [build, setBuild] = useState(null)
@@ -173,9 +173,9 @@ export default function RequestDetailPage() {
   const [buildActionSubmitting, setBuildActionSubmitting] = useState(false)
 
   const isAuthor =
-    request &&
-    session?.user?.id &&
-    String(request.author_id) === String(session.user.id)
+    request?.author_wallet &&
+    !!address &&
+    String(request.author_wallet) === String(address)
   const hasBuild = build && build.status !== 'cancelled'
 
   useEffect(() => {
