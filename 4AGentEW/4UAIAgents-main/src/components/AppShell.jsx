@@ -13,6 +13,7 @@ import RequestDetailPage from './pages/RequestDetailPage'
 import ExplorePage from './pages/ExplorePage'
 import DashboardPage from './pages/DashboardPage'
 import NotificationsPage from './pages/NotificationsPage'
+import DeveloperPage from './pages/DeveloperPage'
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
@@ -36,6 +37,7 @@ export default function AppShell() {
           <Route path="explore" element={<ExplorePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="developer" element={<DeveloperPage />} />
           <Route path="*" element={<Navigate to="feed" replace />} />
         </Routes>
       </div>

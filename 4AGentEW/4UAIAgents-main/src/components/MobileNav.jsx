@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Rss, PenSquare, Compass, LayoutDashboard, Bot } from 'lucide-react'
+import { Rss, PenSquare, Compass, LayoutDashboard, Bot, Code2 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { path: '/app/feed', label: 'Feed', icon: Rss },
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: '/app/agents', label: 'Agents', icon: Bot },
   { path: '/app/explore', label: 'Explore', icon: Compass },
   { path: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/app/developer', label: 'Dev', icon: Code2 },
 ]
 
 export default function MobileNav() {

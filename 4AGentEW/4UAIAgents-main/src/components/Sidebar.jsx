@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Rss, PenSquare, Compass, LayoutDashboard, Bell, Bot, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Rss, PenSquare, Compass, LayoutDashboard, Bell, Bot, Code2, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useWallet } from '../hooks/useWallet'
 import { useOnboarding } from '../hooks/useOnboarding'
 
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { path: '/app/explore', label: 'Explore', icon: Compass },
   { path: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/app/notifications', label: 'Notifications', icon: Bell },
+  { path: '/app/developer', label: 'Developer', icon: Code2 },
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {

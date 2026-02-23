@@ -51,6 +51,7 @@ export const api = {
   get: (path, opts) => request(path, { ...opts, method: 'GET' }),
   post: (path, body, opts) => request(path, { ...opts, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: (path, body, opts) => request(path, { ...opts, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: (path, opts) => request(path, { ...opts, method: 'DELETE' }),
 
   auth: {
     getNonce: (walletAddress) => api.get(`/api/auth/nonce/${encodeURIComponent(walletAddress)}`),
@@ -89,6 +90,12 @@ export const api = {
       api.post('/api/hire', { requestId, pitchId }),
     accept: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/accept`),
     cancel: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/cancel`),
+  },
+  keys: {
+    list: () => api.get('/api/keys').then((r) => r.keys || []),
+    create: (body) => api.post('/api/keys', body),
+    revoke: (id) => api.delete(`/api/keys/${id}`),
+    buildJobs: () => api.get('/api/keys/build-jobs').then((r) => r.jobs || []),
   },
 };
 
