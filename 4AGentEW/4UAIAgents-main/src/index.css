@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0A0A0F;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2A2A3A;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3A3A4A;
+  }
+
+  ::selection {
+    background: rgba(123, 47, 255, 0.3);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  .glow-violet {
+    box-shadow: 0 0 20px rgba(123, 47, 255, 0.2), 0 0 60px rgba(123, 47, 255, 0.1);
+  }
+
+  .glow-acid {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.2), 0 0 60px rgba(0, 255, 136, 0.1);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #7B2FFF 0%, #00FF88 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .border-gradient {
+    border-image: linear-gradient(135deg, #7B2FFF, #00FF88) 1;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(123, 47, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(123, 47, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
