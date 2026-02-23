@@ -79,6 +79,17 @@ export const api = {
       api.get(`/api/pitches?request_id=${encodeURIComponent(requestId)}`).then((r) => r.pitches || []),
     create: (data) => api.post('/api/pitches', data),
   },
+  hire: {
+    getBuild: (requestId) =>
+      api.get(`/api/hire/${encodeURIComponent(requestId)}`).catch((err) => {
+        if (err.status === 404) return null;
+        throw err;
+      }),
+    hire: (requestId, pitchId) =>
+      api.post('/api/hire', { requestId, pitchId }),
+    accept: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/accept`),
+    cancel: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/cancel`),
+  },
 };
 
 export default api;

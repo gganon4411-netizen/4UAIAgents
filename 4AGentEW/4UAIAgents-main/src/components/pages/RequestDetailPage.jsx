@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Clock, DollarSign, Users, Star, ChevronDown, ChevronUp,
-  MessageSquare
+  MessageSquare, X, CheckCircle2, Ban
 } from 'lucide-react'
 import { getRelativeTime } from '../../hooks/useRequests'
 import { getTierColor } from '../../hooks/useAgents'
+import { useWallet } from '../../hooks/useWallet'
 import api from '../../lib/api'
 
 const STATUS_COLORS = {
@@ -30,9 +31,10 @@ const CATEGORY_COLORS = {
   DevTools: 'bg-teal-500/10 text-teal-400',
 }
 
-function PitchCard({ pitch, index, navigate }) {
+function PitchCard({ pitch, index, navigate, isAuthor, hasBuild, onHire }) {
   const [expanded, setExpanded] = useState(false)
   const tierGradient = getTierColor(pitch.agentTier)
+  const showHireButton = isAuthor && !hasBuild && onHire
 
   return (
     <motion.div
@@ -111,6 +113,15 @@ function PitchCard({ pitch, index, navigate }) {
               ))}
             </div>
           )}
+
+          {showHireButton && (
+            <button
+              onClick={() => onHire(pitch)}
+              className="mt-3 px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-all"
+            >
+              Hire This Agent
+            </button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -150,10 +161,22 @@ function RequestDetailSkeleton() {
 export default function RequestDetailPage() {
   const { requestId } = useParams()
   const navigate = useNavigate()
+  const { session } = useWallet()
   const [request, setRequest] = useState(null)
   const [pitches, setPitches] = useState([])
+  const [build, setBuild] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [hireModalPitch, setHireModalPitch] = useState(null)
+  const [hireSubmitting, setHireSubmitting] = useState(false)
+  const [hireError, setHireError] = useState(null)
+  const [buildActionSubmitting, setBuildActionSubmitting] = useState(false)
+
+  const isAuthor =
+    request &&
+    session?.user?.id &&
+    String(request.author_id) === String(session.user.id)
+  const hasBuild = build && build.status !== 'cancelled'
 
   useEffect(() => {
     if (!requestId) return
@@ -170,6 +193,56 @@ export default function RequestDetailPage() {
       .catch((err) => setError(err.status === 404 ? 'Request not found.' : (err.message || 'Failed to load request')))
       .finally(() => setLoading(false))
   }, [requestId])
+
+  useEffect(() => {
+    if (!requestId) return
+    api.hire
+      .getBuild(requestId)
+      .then(setBuild)
+      .catch(() => setBuild(null))
+  }, [requestId])
+
+  const handleHireConfirm = async () => {
+    if (!hireModalPitch || !requestId) return
+    setHireError(null)
+    setHireSubmitting(true)
+    try {
+      const newBuild = await api.hire.hire(requestId, hireModalPitch.id)
+      setBuild(newBuild)
+      setHireModalPitch(null)
+    } catch (err) {
+      setHireError(err.message || 'Failed to hire')
+    } finally {
+      setHireSubmitting(false)
+    }
+  }
+
+  const handleAcceptDelivery = async () => {
+    if (!build?.id) return
+    setBuildActionSubmitting(true)
+    try {
+      const updated = await api.hire.accept(build.id)
+      setBuild(updated)
+      if (request) setRequest({ ...request, status: 'Completed' })
+    } finally {
+      setBuildActionSubmitting(false)
+    }
+  }
+
+  const handleCancelBuild = async () => {
+    if (!build?.id) return
+    setBuildActionSubmitting(true)
+    try {
+      await api.hire.cancel(build.id)
+      setBuild(null)
+      if (request) setRequest({ ...request, status: 'Open', hired_agent_id: null })
+    } finally {
+      setBuildActionSubmitting(false)
+    }
+  }
+
+  const hiredAgentName =
+    build && pitches.find((p) => p.agentId === build.agent_id)?.agentName
 
   if (loading) {
     return <RequestDetailSkeleton />
@@ -258,9 +331,61 @@ export default function RequestDetailPage() {
           </div>
         </div>
 
+        {/* Build status card */}
+        {hasBuild && hiredAgentName && build.status !== 'accepted' && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-4 rounded-xl bg-acid/10 border border-acid/30"
+          >
+            <p className="text-sm font-semibold text-acid">
+              {hiredAgentName} is hired — Building your app 🔨
+            </p>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={handleAcceptDelivery}
+                disabled={buildActionSubmitting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Accept Delivery
+              </button>
+              <button
+                onClick={handleCancelBuild}
+                disabled={buildActionSubmitting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {hasBuild && build.status === 'accepted' && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-4 rounded-xl bg-acid/10 border border-acid/30"
+          >
+            <p className="text-sm font-semibold text-acid">
+              <CheckCircle2 className="w-4 h-4 inline-block mr-1.5 align-middle" />
+              Build accepted — {hiredAgentName} delivered
+            </p>
+          </motion.div>
+        )}
+
         <div className="space-y-2.5">
           {pitches.map((pitch, i) => (
-            <PitchCard key={pitch.id} pitch={pitch} index={i} navigate={navigate} />
+            <PitchCard
+              key={pitch.id}
+              pitch={pitch}
+              index={i}
+              navigate={navigate}
+              isAuthor={isAuthor}
+              hasBuild={!!hasBuild}
+              onHire={isAuthor && !hasBuild ? setHireModalPitch : undefined}
+            />
           ))}
         </div>
 
@@ -272,6 +397,71 @@ export default function RequestDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Hire confirmation modal */}
+      <AnimatePresence>
+        {hireModalPitch && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => !hireSubmitting && setHireModalPitch(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm bg-base-800 border border-base-600/50 rounded-2xl p-6 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => !hireSubmitting && setHireModalPitch(null)}
+                className="absolute top-4 right-4 text-base-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <h3 className="text-base font-bold mb-3">Hire {hireModalPitch.agentName}</h3>
+              <div className="space-y-2 text-sm text-base-200">
+                <p className="flex justify-between">
+                  <span className="text-base-400">Price</span>
+                  <span className="font-mono text-acid">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</span>
+                </p>
+                <p className="flex justify-between">
+                  <span className="text-base-400">Estimated time</span>
+                  <span>{hireModalPitch.estimatedTime || '—'}</span>
+                </p>
+              </div>
+              <p className="mt-4 text-xs text-base-300 leading-relaxed">
+                Your escrow of{' '}
+                <span className="font-semibold text-violet-light">
+                  {(hireModalPitch.price ?? 0).toLocaleString()} USDC
+                </span>{' '}
+                will be locked until you accept delivery.
+              </p>
+              {hireError && (
+                <p className="mt-3 text-xs text-red-400">{hireError}</p>
+              )}
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => !hireSubmitting && setHireModalPitch(null)}
+                  disabled={hireSubmitting}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 transition-colors disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleHireConfirm}
+                  disabled={hireSubmitting}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
+                >
+                  {hireSubmitting ? 'Hiring…' : 'Confirm'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
