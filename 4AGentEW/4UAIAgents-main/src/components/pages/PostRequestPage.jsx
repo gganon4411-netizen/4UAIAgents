@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Send, Plus, X, DollarSign, Clock, Tag, FileText, CheckCircle2 } from 'lucide-react'
 import api from '../../lib/api'
@@ -11,6 +12,7 @@ const URGENCY_OPTIONS = [
 ]
 
 export default function PostRequestPage() {
+  const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [budget, setBudget] = useState('')
@@ -31,12 +33,20 @@ export default function PostRequestPage() {
 
   const removeTag = (tag) => setTags(tags.filter((t) => t !== tag))
 
-  const isValid = title.trim().length >= 5 && description.trim().length >= 20 && budget
+  const titleOk = title.trim().length >= 5
+  const descriptionOk = description.trim().length >= 20
+  const budgetOk = !!budget
+  const isValid = titleOk && descriptionOk && budgetOk
+
+  useEffect(() => {
+    console.log('[PostRequest] isValid:', isValid, '| titleOk:', titleOk, '(length:', title.trim().length, ')', '| descriptionOk:', descriptionOk, '(length:', description.trim().length, ')', '| budgetOk:', budgetOk, '(value:', budget, ')')
+  }, [isValid, titleOk, descriptionOk, budgetOk, title, description, budget])
 
   const timelineFromUrgency = { low: '1 week', medium: '3 days', high: '24hrs' }
 
   const handleSubmit = async () => {
-    if (!isValid || submitting) return
+    if (submitting) return
+    console.log('[PostRequest] Submitting... (isValid:', isValid, ')')
     const token = (() => {
       try {
         const raw = localStorage.getItem('4u_session')
@@ -45,28 +55,41 @@ export default function PostRequestPage() {
         return null
       }
     })()
+    console.log('[PostRequest] 4u_session token exists:', !!token, token ? '(length ' + token.length + ')' : '')
     if (!token) {
       setSubmitError('Please sign in with your wallet to post a request.')
       return
     }
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      categories: tags.length ? tags : [],
+      budget: Number(budget),
+      timeline: timelineFromUrgency[urgency] || null,
+    }
+    console.log('[PostRequest] Payload:', payload)
     setSubmitError(null)
     setSubmitting(true)
     try {
-      await api.requests.create({
-        title: title.trim(),
-        description: description.trim(),
-        categories: tags.length ? tags : [],
-        budget: Number(budget),
-        timeline: timelineFromUrgency[urgency] || null,
-      })
-      setSubmitted(true)
-      setTitle('')
-      setDescription('')
-      setBudget('')
-      setUrgency('medium')
-      setTags([])
+      const response = await api.requests.create(payload)
+      console.log('[PostRequest] API full response:', response)
+      const hasValidId = response && typeof response.id !== 'undefined' && response.id != null
+      if (hasValidId) {
+        setSubmitted(true)
+        setTitle('')
+        setDescription('')
+        setBudget('')
+        setUrgency('medium')
+        setTags([])
+        setTimeout(() => navigate('/app/feed'), 1500)
+      } else {
+        console.log('[PostRequest] API returned no id, treating as failure:', response)
+        setSubmitError(response?.error || response?.message || 'Request was not created. Please try again.')
+      }
     } catch (err) {
-      setSubmitError(err.status === 401 ? 'Please sign in with your wallet to post a request.' : (err.message || 'Failed to post request. Try again.'))
+      console.log('[PostRequest] API error (full):', err)
+      console.log('[PostRequest] API error status:', err?.status, 'message:', err?.message, 'body:', err?.body)
+      setSubmitError(err.status === 401 ? 'Please sign in with your wallet to post a request.' : (err.message || err?.body?.error || 'Failed to post request. Try again.'))
     } finally {
       setSubmitting(false)
     }
@@ -105,8 +128,8 @@ export default function PostRequestPage() {
       </div>
 
       {submitError && (
-        <div className="mb-4 rounded-xl bg-violet/10 border border-violet/30 p-3">
-          <p className="text-sm text-violet-light font-medium">{submitError}</p>
+        <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/40 p-3">
+          <p className="text-sm text-red-400 font-medium">{submitError}</p>
         </div>
       )}
 
@@ -232,12 +255,13 @@ export default function PostRequestPage() {
 
         {/* Submit */}
         <motion.button
-          whileHover={isValid && !submitting ? { scale: 1.01 } : {}}
-          whileTap={isValid && !submitting ? { scale: 0.99 } : {}}
+          type="button"
+          whileHover={!submitting ? { scale: 1.01 } : {}}
+          whileTap={!submitting ? { scale: 0.99 } : {}}
           onClick={handleSubmit}
-          disabled={!isValid || submitting}
+          disabled={submitting}
           className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
-            isValid && !submitting
+            !submitting
               ? 'bg-violet text-white glow-violet hover:bg-violet-light'
               : 'bg-base-700 text-base-300 cursor-not-allowed'
           }`}

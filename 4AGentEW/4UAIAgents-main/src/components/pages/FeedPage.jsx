@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Clock, DollarSign, MessageSquare, ArrowUp, Filter, ChevronDown, X,
@@ -133,11 +133,13 @@ function RequestCardSkeleton() {
 
 export default function FeedPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { CATEGORIES, STATUSES } = useRequests()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Refetch feed whenever the user navigates to the feed so new requests always show up fresh
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -145,7 +147,7 @@ export default function FeedPage() {
       .then(setRequests)
       .catch((err) => setError(err.message || 'Failed to load requests'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [location.pathname])
 
   // Filters
   const [categoryFilter, setCategoryFilter] = useState('All')

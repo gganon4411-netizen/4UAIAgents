@@ -8,6 +8,8 @@ import api from '../lib/api'
 
 const SESSION_KEY = '4u_session'
 const USER_KEY = '4u_user'
+const API_BASE = 'https://4u-backend-production.up.railway.app'
+const PROFILE_FIELDS = ['display_name', 'username', 'bio', 'avatar_url', 'twitter', 'github', 'website']
 
 const SessionContext = createContext(null)
 
@@ -81,6 +83,24 @@ function AuthSessionProvider({ children }) {
         const signatureBase58 = bs58.encode(signature)
         const data = await api.auth.signInWithWallet(publicKey.toBase58(), message, signatureBase58)
         if (cancelled) return
+        const token = data?.access_token
+        if (token) {
+          try {
+            const profileRes = await fetch(`${API_BASE}/api/auth/profile`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (profileRes.ok) {
+              const profileData = await profileRes.json()
+              const mergedUser = { ...data.user }
+              PROFILE_FIELDS.forEach((key) => {
+                if (profileData[key] !== undefined) mergedUser[key] = profileData[key]
+              })
+              data.user = mergedUser
+            }
+          } catch (_) {
+            // keep session without profile merge on profile fetch failure
+          }
+        }
         setSession(data)
         setStep('connected')
         setTimeout(() => setStep('idle'), 800)

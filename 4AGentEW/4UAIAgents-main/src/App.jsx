@@ -9,15 +9,16 @@ import Onboarding from './components/Onboarding'
 import AppShell from './components/AppShell'
 
 function AppRouter() {
-  const { isConnected } = useWallet()
+  const { isConnected, session } = useWallet()
   const { isOnboarded } = useOnboarding()
+  const hasDisplayNameInSession = !!(session?.user?.display_name?.trim())
 
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {!isConnected ? (
           <Route path="*" element={<LandingPage />} />
-        ) : !isOnboarded ? (
+        ) : !isOnboarded && !hasDisplayNameInSession ? (
           <Route path="*" element={<Onboarding />} />
         ) : (
           <>

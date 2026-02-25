@@ -4,7 +4,9 @@ import {
   X, Send, DollarSign, Clock, Tag, FileText, Paperclip, Info,
   CheckCircle2, ChevronDown, Plus, Upload
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useRequests } from '../hooks/useRequests'
+import api from '../lib/api'
 
 const SUGGESTED_BUDGETS = [
   { label: '$500–$2K', desc: 'Small feature or component' },
@@ -14,7 +16,8 @@ const SUGGESTED_BUDGETS = [
 ]
 
 export default function PostRequestModal({ onClose }) {
-  const { addRequest, CATEGORIES, TIMELINES } = useRequests()
+  const navigate = useNavigate()
+  const { CATEGORIES, TIMELINES } = useRequests()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -25,6 +28,8 @@ export default function PostRequestModal({ onClose }) {
   const [attachment, setAttachment] = useState(null)
   const [showBudgetHint, setShowBudgetHint] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
   const [timelineOpen, setTimelineOpen] = useState(false)
 
   const fileRef = useRef(null)
@@ -56,17 +61,33 @@ export default function PostRequestModal({ onClose }) {
     parseFloat(budget) > 0 &&
     (timeline && timeline !== 'Custom' || (timeline === 'Custom' && customTimeline.trim()))
 
-  const handleSubmit = () => {
-    if (!isValid) return
-    addRequest({
-      title: title.trim(),
-      description: description.trim(),
-      categories: selectedCategories,
-      budget: parseFloat(budget),
-      timeline: timeline === 'Custom' ? customTimeline.trim() : timeline,
-      attachment: attachment ? attachment.name : null,
-    })
-    setSubmitted(true)
+  const handleSubmit = async () => {
+    if (!isValid || submitting) return
+    setSubmitError(null)
+    setSubmitting(true)
+    try {
+      const payload = {
+        title: title.trim(),
+        description: description.trim(),
+        categories: selectedCategories,
+        budget: parseFloat(budget),
+        timeline: timeline === 'Custom' ? customTimeline.trim() : timeline,
+        attachment: attachment ? attachment.name : null,
+      }
+      const response = await api.requests.create(payload)
+      const hasValidId = response && typeof response.id !== 'undefined' && response.id != null
+      if (hasValidId) {
+        setSubmitted(true)
+        onClose()
+        navigate('/app/feed')
+      } else {
+        setSubmitError(response?.error || response?.message || 'Request was not created. Please try again.')
+      }
+    } catch (err) {
+      setSubmitError(err.status === 401 ? 'Please sign in with your wallet to post a request.' : (err.message || err?.body?.error || 'Failed to post request. Try again.'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handlePostAnother = () => {
@@ -141,6 +162,11 @@ export default function PostRequestModal({ onClose }) {
           </div>
         ) : (
           <div className="px-5 py-4 space-y-4">
+            {submitError && (
+              <div className="rounded-xl bg-red-500/10 border border-red-500/40 p-3">
+                <p className="text-sm text-red-400 font-medium">{submitError}</p>
+              </div>
+            )}
             {/* Title */}
             <div>
               <label className="flex items-center gap-2 text-xs font-medium text-base-100 mb-2">
@@ -340,18 +366,19 @@ export default function PostRequestModal({ onClose }) {
             {/* Submit */}
             <div className="pt-2 pb-1">
               <motion.button
-                whileHover={{ scale: isValid ? 1.01 : 1 }}
-                whileTap={{ scale: isValid ? 0.99 : 1 }}
+                type="button"
+                whileHover={{ scale: isValid && !submitting ? 1.01 : 1 }}
+                whileTap={{ scale: isValid && !submitting ? 0.99 : 1 }}
                 onClick={handleSubmit}
-                disabled={!isValid}
+                disabled={!isValid || submitting}
                 className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
-                  isValid
+                  isValid && !submitting
                     ? 'bg-violet text-white glow-violet hover:bg-violet-light'
                     : 'bg-base-700 text-base-400 cursor-not-allowed'
                 }`}
               >
                 <Send className="w-4 h-4" />
-                Post Request
+                {submitting ? 'Posting…' : 'Post Request'}
               </motion.button>
             </div>
           </div>

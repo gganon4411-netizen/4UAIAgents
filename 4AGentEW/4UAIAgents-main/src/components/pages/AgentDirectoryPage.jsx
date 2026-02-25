@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -103,14 +103,26 @@ export default function AgentDirectoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
+  const SDK_DIRECTORY_URL = 'https://4u-backend-production.up.railway.app/api/sdk/directory'
+
+  const loadAgents = useCallback(() => {
     setLoading(true)
     setError(null)
-    api.agents.list()
-      .then(setAgents)
+    Promise.all([
+      api.agents.list(),
+      fetch(SDK_DIRECTORY_URL).then((r) => r.ok ? r.json() : { agents: [] }).then((d) => d.agents || []).catch(() => []),
+    ])
+      .then(([mainAgents, sdkAgents]) => {
+        const merged = [...(mainAgents || []), ...(sdkAgents || [])]
+        setAgents(merged)
+      })
       .catch((err) => setError(err.message || 'Failed to load agents'))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    loadAgents()
+  }, [loadAgents])
 
   const [search, setSearch] = useState('')
   const [specFilter, setSpecFilter] = useState('')
@@ -188,11 +200,7 @@ export default function AgentDirectoryPage() {
           <p className="text-sm text-violet-light font-medium">{error}</p>
           <p className="text-2xs text-base-300 mt-1">Check your connection and try again.</p>
           <button
-            onClick={() => {
-              setError(null)
-              setLoading(true)
-              api.agents.list().then(setAgents).catch((e) => setError(e.message)).finally(() => setLoading(false))
-            }}
+            onClick={loadAgents}
             className="mt-3 px-3 py-1.5 rounded-lg text-xs text-violet-light bg-violet/20 hover:bg-violet/30 transition-all"
           >
             Retry
@@ -247,15 +255,15 @@ export default function AgentDirectoryPage() {
                 <div className="flex items-center gap-3 mb-3 text-2xs text-base-300">
                   <span className="flex items-center gap-1">
                     <Star className="w-3 h-3 text-amber-400" />
-                    <span className="text-white font-semibold">{agent.rating}</span>
+                    <span className="text-white font-semibold">{agent.rating != null ? agent.rating : '—'}</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-acid" />
-                    {agent.totalBuilds}
+                    {agent.totalBuilds ?? agent.completedJobs ?? 0}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    ~{agent.avgDelivery}
+                    {agent.avgDelivery != null ? `~${agent.avgDelivery}` : '—'}
                   </span>
                 </div>
 

@@ -97,6 +97,13 @@ export const api = {
     revoke: (id) => api.delete(`/api/keys/${id}`),
     buildJobs: () => api.get('/api/keys/build-jobs').then((r) => r.jobs || []),
   },
+  dashboard: {
+    stats: () => api.get('/api/dashboard/stats'),
+    platformStats: () => api.get('/api/dashboard/platform-stats'),
+    activity: () => api.get('/api/dashboard/activity').then((r) => r.activity || []),
+    myAgents: () => api.get('/api/dashboard/my-agents').then((r) => r.agents || []),
+    updateMyAgent: (id, body) => api.patch(`/api/dashboard/my-agents/${id}`, body),
+  },
 };
 
 export default api;

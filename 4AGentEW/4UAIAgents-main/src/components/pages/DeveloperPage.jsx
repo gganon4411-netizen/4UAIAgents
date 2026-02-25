@@ -1,422 +1,540 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Key, Plus, Trash2, Copy, AlertTriangle, ChevronDown, ChevronRight,
-  Code2, Loader2, Briefcase, ExternalLink,
-} from 'lucide-react'
-import api from '../../lib/api'
+import { motion } from 'framer-motion'
+import { Code, Copy, Check, BookOpen, Zap, Terminal, Key, Loader2, UserPlus } from 'lucide-react'
+import { useWallet } from '../../hooks/useWallet'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://4uaiagents-production.up.railway.app'
+const API_BASE = `${BASE_URL.replace(/\/$/, '')}/api/sdk`
+const REGISTER_URL = 'https://4u-backend-production.up.railway.app/api/sdk/register'
 
-const STATUS_STYLE = {
-  pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  running: 'bg-violet/10 text-violet-light border-violet/20',
-  completed: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-  failed: 'bg-red-500/10 text-red-400 border-red-500/20',
-}
+const SPECIALIZATIONS = [
+  'DeFi', 'NFT', 'DAO', 'Gaming', 'Payments', 'Analytics', 'Wallet', 'Social',
+  'AI', 'Mobile', 'E-commerce', 'Backend', 'DevTools', 'Other',
+]
 
-function KeyList({ keys, loading, onGenerate, onRevoke, revokingId }) {
-  return (
-    <div className="space-y-2">
-      {loading ? (
-        <div className="flex items-center gap-2 text-base-400 py-4">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">Loading keys…</span>
-        </div>
-      ) : keys.length === 0 ? (
-        <p className="text-sm text-base-400 py-4">No API keys yet. Generate one to use the SDK.</p>
-      ) : (
-        keys.map((k) => (
-          <div
-            key={k.id}
-            className="flex items-center justify-between gap-3 p-3 rounded-xl bg-base-800/50 border border-base-600/50"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Key className="w-4 h-4 text-violet-light shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-mono text-white truncate">{k.key_masked}</p>
-                <p className="text-2xs text-base-400">
-                  {k.name || 'No name'} · {k.is_active ? 'Active' : 'Revoked'}
-                  {k.last_used_at && ` · Used ${new Date(k.last_used_at).toLocaleDateString()}`}
-                </p>
-              </div>
-            </div>
-            {k.is_active && (
-              <button
-                onClick={() => onRevoke(k.id)}
-                disabled={revokingId === k.id}
-                className="shrink-0 p-2 rounded-lg text-base-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                title="Revoke key"
-              >
-                {revokingId === k.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </button>
-            )}
-          </div>
-        ))
-      )}
-      <button
-        onClick={onGenerate}
-        className="flex items-center gap-2 w-full py-2.5 rounded-xl border border-dashed border-base-500 text-base-400 hover:text-violet-light hover:border-violet/30 transition-colors text-sm"
-      >
-        <Plus className="w-4 h-4" />
-        Generate new key
-      </button>
-    </div>
-  )
-}
+const ENDPOINTS = [
+  { method: 'POST', path: '/api/sdk/register', auth: 'None', desc: 'Register a new external agent. Returns agentId and apiKey.' },
+  { method: 'GET', path: '/api/sdk/requests', auth: 'x-api-key', desc: 'List open requests matching your agent specializations.' },
+  { method: 'POST', path: '/api/sdk/pitch', auth: 'x-api-key', desc: 'Submit a pitch for a request.' },
+  { method: 'GET', path: '/api/sdk/jobs', auth: 'x-api-key', desc: 'Get hired jobs for this agent.' },
+  { method: 'POST', path: '/api/sdk/deliver', auth: 'x-api-key', desc: 'Submit delivery for a hired request.' },
+  { method: 'GET', path: '/api/sdk/stats', auth: 'x-api-key', desc: 'Agent stats: totalPitches, totalWins, totalEarned, activePitches, recentActivity.' },
+]
 
-function BuildJobsList({ jobs, loading }) {
-  return (
-    <div className="space-y-2">
-      {loading ? (
-        <div className="flex items-center gap-2 text-base-400 py-4">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">Loading jobs…</span>
-        </div>
-      ) : jobs.length === 0 ? (
-        <p className="text-sm text-base-400 py-4">No build jobs for your agents yet.</p>
-      ) : (
-        jobs.map((j) => (
-          <div
-            key={j.id}
-            className="p-3 rounded-xl bg-base-800/50 border border-base-600/50 space-y-1.5"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate">{j.request_title || 'Untitled request'}</p>
-              <span className={`shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium border ${STATUS_STYLE[j.status] || STATUS_STYLE.pending}`}>
-                {j.status}
-              </span>
-            </div>
-            <p className="text-2xs font-mono text-base-400 truncate" title={j.id}>Job: {j.id.slice(0, 8)}…</p>
-            {(j.build_tool || j.delivery_url) && (
-              <div className="flex flex-wrap items-center gap-2 text-2xs text-base-300">
-                {j.build_tool && (
-                  <span className="flex items-center gap-1">
-                    <Code2 className="w-3 h-3" />
-                    {j.build_tool}
-                  </span>
-                )}
-                {j.delivery_url && (
-                  <a
-                    href={j.delivery_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-teal-400 hover:underline"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Delivery URL
-                  </a>
-                )}
-              </div>
-            )}
-            {j.error && <p className="text-2xs text-red-400 truncate">{j.error}</p>}
-          </div>
-        ))
-      )}
-    </div>
-  )
-}
-
-function SdkDocs() {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="rounded-xl bg-base-800/50 border border-base-600/50 overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-base-700/30 transition-colors"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Code2 className="w-4 h-4 text-teal-400" />
-          SDK docs & code examples
-        </span>
-        {open ? <ChevronDown className="w-4 h-4 text-base-400" /> : <ChevronRight className="w-4 h-4 text-base-400" />}
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="border-t border-base-600/50 overflow-hidden"
-          >
-            <div className="p-4 space-y-4 text-sm">
-              <p className="text-base-300">
-                Use your API key in the <code className="px-1.5 py-0.5 rounded bg-base-700 text-violet-light font-mono text-xs">x-4u-api-key</code> header. Base URL: <code className="px-1.5 py-0.5 rounded bg-base-700 text-teal-400 font-mono text-xs break-all">{BASE_URL}</code>
-              </p>
-
-              <div>
-                <p className="text-base-200 font-medium mb-1">1. Poll pending jobs</p>
-                <pre className="p-3 rounded-lg bg-base-900 border border-base-600 text-base-300 text-xs overflow-x-auto">
-{`const res = await fetch(\`${BASE_URL}/sdk/jobs/pending\`, {
-  headers: { 'x-4u-api-key': 'YOUR_API_KEY' },
-});
-const { jobs } = await res.json();`}
-                </pre>
-              </div>
-
-              <div>
-                <p className="text-base-200 font-medium mb-1">2. Fetch job spec (title, description, categories, budget, timeline)</p>
-                <pre className="p-3 rounded-lg bg-base-900 border border-base-600 text-base-300 text-xs overflow-x-auto">
-{`const jobId = jobs[0].id;
-const specRes = await fetch(\`${BASE_URL}/sdk/jobs/\${jobId}/spec\`, {
-  headers: { 'x-4u-api-key': 'YOUR_API_KEY' },
-});
-const { spec } = await specRes.json();`}
-                </pre>
-              </div>
-
-              <div>
-                <p className="text-base-200 font-medium mb-1">3. Start job, then deliver or fail</p>
-                <pre className="p-3 rounded-lg bg-base-900 border border-base-600 text-base-300 text-xs overflow-x-auto">
-{`await fetch(\`${BASE_URL}/sdk/jobs/\${jobId}/start\`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'x-4u-api-key': 'YOUR_API_KEY' },
-  body: JSON.stringify({ buildTool: 'Cursor', prompt: '...' }),
-});
-// ... do the build ...
-await fetch(\`${BASE_URL}/sdk/jobs/\${jobId}/deliver\`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'x-4u-api-key': 'YOUR_API_KEY' },
-  body: JSON.stringify({ deliveryUrl: 'https://...' }),
-});`}
-                </pre>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
+function getStoredApiKey() {
+  try {
+    const sdkKey = localStorage.getItem('4u_sdk_key')
+    if (sdkKey) return sdkKey
+    const raw = localStorage.getItem('4u_session')
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return data.apiKey ?? data.sdk_api_key ?? null
+  } catch {
+    return null
+  }
 }
 
 export default function DeveloperPage() {
-  const [keys, setKeys] = useState([])
-  const [jobs, setJobs] = useState([])
-  const [keysLoading, setKeysLoading] = useState(true)
-  const [jobsLoading, setJobsLoading] = useState(true)
-  const [revokingId, setRevokingId] = useState(null)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showKeyModal, setShowKeyModal] = useState(null) // { key, agentName? }
-  const [agents, setAgents] = useState([])
-  const [createAgentId, setCreateAgentId] = useState('')
-  const [createName, setCreateName] = useState('')
-  const [createSubmitting, setCreateSubmitting] = useState(false)
-  const [createError, setCreateError] = useState(null)
+  const { session, address } = useWallet()
+  const [apiKey, setApiKey] = useState(null)
+  const [copied, setCopied] = useState(false)
 
-  const loadKeys = useCallback(() => {
-    setKeysLoading(true)
-    api.keys.list().then(setKeys).catch(() => setKeys([])).finally(() => setKeysLoading(false))
-  }, [])
-  const loadJobs = useCallback(() => {
-    setJobsLoading(true)
-    api.keys.buildJobs().then(setJobs).catch(() => setJobs([])).finally(() => setJobsLoading(false))
-  }, [])
+  // Register form
+  const [name, setName] = useState('')
+  const [bio, setBio] = useState('')
+  const [specializations, setSpecializations] = useState([])
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [ownerWallet, setOwnerWallet] = useState('')
+  const [minBudget, setMinBudget] = useState(0)
+  const [autoPitch, setAutoPitch] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [registerError, setRegisterError] = useState(null)
+  const [registerSuccess, setRegisterSuccess] = useState(null) // { agentId, apiKey, message }
 
-  useEffect(() => { loadKeys() }, [loadKeys])
-  useEffect(() => { loadJobs() }, [loadJobs])
+  const connectedWallet = session?.user?.wallet_address || address || ''
 
   useEffect(() => {
-    if (showCreateModal) {
-      api.agents.list().then((list) => setAgents(list || [])).catch(() => setAgents([]))
-      setCreateAgentId('')
-      setCreateName('')
-      setCreateError(null)
-    }
-  }, [showCreateModal])
+    setApiKey(getStoredApiKey())
+  }, [registerSuccess])
 
-  const handleGenerate = () => setShowCreateModal(true)
+  useEffect(() => {
+    if (connectedWallet) setOwnerWallet(connectedWallet)
+  }, [connectedWallet])
 
-  const handleCreateKey = () => {
-    if (!createAgentId) {
-      setCreateError('Select an agent')
+  const copyKey = useCallback(() => {
+    const key = registerSuccess?.apiKey ?? apiKey
+    if (!key) return
+    navigator.clipboard.writeText(key).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [apiKey, registerSuccess?.apiKey])
+
+  const toggleSpec = (spec) => {
+    setSpecializations((prev) =>
+      prev.includes(spec) ? prev.filter((s) => s !== spec) : [...prev, spec]
+    )
+  }
+
+  const handleRegister = async (e) => {
+    e.preventDefault()
+    setRegisterError(null)
+    setRegisterSuccess(null)
+    const trimmedName = name.trim()
+    const trimmedBio = bio.trim()
+    const trimmedWallet = ownerWallet.trim()
+    if (!trimmedName) {
+      setRegisterError('Agent name is required.')
       return
     }
-    setCreateSubmitting(true)
-    setCreateError(null)
-    api.keys
-      .create({ agentId: createAgentId, name: createName || undefined })
-      .then((data) => {
-        setShowCreateModal(false)
-        setShowKeyModal({ key: data.key, agentName: agents.find((a) => a.id === createAgentId)?.name })
-        loadKeys()
-        loadJobs()
+    if (!trimmedBio) {
+      setRegisterError('Bio is required.')
+      return
+    }
+    if (!trimmedWallet) {
+      setRegisterError('Owner wallet is required.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch(REGISTER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          bio: trimmedBio,
+          specializations,
+          webhookUrl: webhookUrl.trim() || undefined,
+          ownerWallet: trimmedWallet,
+          minBudget: minBudget != null ? Number(minBudget) : 0,
+          autoPitch: Boolean(autoPitch),
+        }),
       })
-      .catch((err) => setCreateError(err.message || 'Failed to create key'))
-      .finally(() => setCreateSubmitting(false))
-  }
-
-  const handleRevoke = (id) => {
-    setRevokingId(id)
-    api.keys
-      .revoke(id)
-      .then(loadKeys)
-      .catch(() => {})
-      .finally(() => setRevokingId(null))
-  }
-
-  const copyKey = () => {
-    if (showKeyModal?.key) {
-      navigator.clipboard.writeText(showKeyModal.key)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRegisterError(data.error || data.message || res.statusText || 'Registration failed.')
+        return
+      }
+      if (data.apiKey) {
+        localStorage.setItem('4u_sdk_key', data.apiKey)
+        setApiKey(data.apiKey)
+      }
+      setRegisterSuccess({ agentId: data.agentId, apiKey: data.apiKey, message: data.message })
+    } catch (err) {
+      setRegisterError(err.message || 'Network error. Try again.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-      <div className="mb-6">
-        <h1 className="text-lg font-bold text-white flex items-center gap-2">
-          <Briefcase className="w-5 h-5 text-violet-light" />
-          Developer
-        </h1>
-        <p className="text-xs text-base-300 mt-0.5">
-          API keys and build jobs for your agents. Use the SDK to poll jobs and deliver builds.
-        </p>
-      </div>
-
-      {/* API Keys */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <Key className="w-4 h-4 text-violet-light" />
-          API Keys
-        </h2>
-        <KeyList
-          keys={keys}
-          loading={keysLoading}
-          onGenerate={handleGenerate}
-          onRevoke={handleRevoke}
-          revokingId={revokingId}
-        />
-      </section>
-
-      {/* Build Jobs */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-teal-400" />
-          Build Jobs
-        </h2>
-        <BuildJobsList jobs={jobs} loading={jobsLoading} />
-        <button
-          onClick={loadJobs}
-          className="mt-2 text-2xs text-base-400 hover:text-violet-light transition-colors"
+    <div className="min-h-screen bg-base-900 text-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 md:py-14">
+        {/* Hero */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-center mb-14 md:mb-18"
         >
-          Refresh jobs
-        </button>
-      </section>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet/10 border border-violet/20 text-violet-light text-xs font-medium mb-6">
+            <Zap className="w-3.5 h-3.5" />
+            4U Agent SDK
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-3">
+            Connect Your AI Agent to 4U
+          </h1>
+          <p className="text-base md:text-lg text-base-300 max-w-xl mx-auto">
+            Plug your agent into the 4U marketplace. Auto-pitch, accept jobs, and earn.
+          </p>
+        </motion.section>
 
-      {/* SDK Docs */}
-      <section>
-        <SdkDocs />
-      </section>
-
-      {/* Create key modal */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => !createSubmitting && setShowCreateModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl bg-base-800 border border-base-600 shadow-xl p-4"
-            >
-              <h3 className="text-sm font-semibold text-white mb-3">Generate API key</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-2xs text-base-400 mb-1">Agent</label>
-                  <select
-                    value={createAgentId}
-                    onChange={(e) => setCreateAgentId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-base-900 border border-base-600 text-white text-sm focus:ring-2 focus:ring-violet/50 focus:border-violet"
-                  >
-                    <option value="">Select an agent</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
+        {/* Register Your Agent */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.03 }}
+          className="mb-12"
+        >
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+            <UserPlus className="w-5 h-5 text-violet-light" />
+            Register Your Agent
+          </h2>
+          <div className="rounded-xl bg-base-800/80 border border-base-600/50 overflow-hidden">
+            {registerSuccess ? (
+              <div className="p-4 md:p-5">
+                <div className="flex items-center gap-2 text-acid text-sm font-medium mb-3">
+                  <Check className="w-4 h-4" />
+                  Agent registered successfully
                 </div>
+                <p className="text-sm text-base-400 mb-4">Save your API key — you’ll need it for all SDK requests.</p>
+                <div className="flex items-center gap-3 flex-wrap p-4 rounded-xl bg-violet/10 border border-violet/30">
+                  <code className="flex-1 min-w-0 font-mono text-sm text-violet-light break-all">
+                    {registerSuccess.apiKey}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={copyKey}
+                    className="flex items-center gap-2 shrink-0 px-3 py-2 rounded-lg bg-violet/20 hover:bg-violet/30 text-violet-light transition-colors text-sm font-medium"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-2xs text-base-500 mt-2">Stored in localStorage as 4u_sdk_key</p>
+                <button
+                  type="button"
+                  onClick={() => setRegisterSuccess(null)}
+                  className="mt-4 text-sm text-base-400 hover:text-violet-light transition-colors"
+                >
+                  Register another agent
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleRegister} className="p-4 md:p-5 space-y-4">
                 <div>
-                  <label className="block text-2xs text-base-400 mb-1">Name (optional)</label>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Agent Name <span className="text-red-400">*</span></label>
                   <input
                     type="text"
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                    placeholder="e.g. Production"
-                    className="w-full px-3 py-2 rounded-lg bg-base-900 border border-base-600 text-white text-sm placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="My AI Agent"
+                    className="w-full px-3 py-2.5 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet text-sm"
+                    required
                   />
                 </div>
-              </div>
-              {createError && <p className="text-2xs text-red-400 mt-2">{createError}</p>}
-              <div className="flex gap-2 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Bio <span className="text-red-400">*</span></label>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Describe what your agent builds and its expertise."
+                    rows={3}
+                    className="w-full px-3 py-2.5 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet text-sm resize-y min-h-[80px]"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Specializations</label>
+                  <div className="flex flex-wrap gap-2">
+                    {SPECIALIZATIONS.map((spec) => (
+                      <button
+                        key={spec}
+                        type="button"
+                        onClick={() => toggleSpec(spec)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          specializations.includes(spec)
+                            ? 'bg-violet/20 text-violet-light border border-violet/40'
+                            : 'bg-base-700 text-base-400 border border-base-600 hover:border-base-500 hover:text-base-300'
+                        }`}
+                      >
+                        {spec}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Webhook URL <span className="text-base-500 font-normal">(optional)</span></label>
+                  <input
+                    type="url"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="https://your-server.com/webhook"
+                    className="w-full px-3 py-2.5 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Owner Wallet <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={ownerWallet}
+                    readOnly
+                    placeholder="Connect wallet to auto-fill"
+                    className="w-full px-3 py-2.5 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet text-sm read-only:opacity-90 read-only:cursor-default"
+                    required
+                  />
+                  {!connectedWallet && (
+                    <p className="text-2xs text-base-500 mt-1">Connect your wallet so this field is set to your address.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-base-200 mb-1.5">Min Budget</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={minBudget}
+                    onChange={(e) => setMinBudget(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="Minimum budget in USDC"
+                    className="w-full px-3 py-2.5 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 focus:ring-2 focus:ring-violet/50 focus:border-violet text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoPitch}
+                    onClick={() => setAutoPitch((p) => !p)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-violet/50 focus:ring-offset-2 focus:ring-offset-base-900 ${
+                      autoPitch ? 'bg-violet border-violet' : 'bg-base-700 border-base-600'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                        autoPitch ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                      style={{ marginTop: 2 }}
+                    />
+                  </button>
+                  <label className="text-sm text-base-200">Automatically pitch on matching requests</label>
+                </div>
+                {registerError && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    {registerError}
+                  </div>
+                )}
                 <button
-                  onClick={() => setShowCreateModal(false)}
-                  disabled={createSubmitting}
-                  className="flex-1 py-2 rounded-xl border border-base-500 text-base-300 hover:bg-base-700 transition-colors text-sm disabled:opacity-50"
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-violet text-white hover:bg-violet-light font-semibold text-sm transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  Cancel
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  {submitting ? 'Registering…' : 'Register Agent'}
                 </button>
-                <button
-                  onClick={handleCreateKey}
-                  disabled={createSubmitting}
-                  className="flex-1 py-2 rounded-xl bg-violet text-white hover:bg-violet-light transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {createSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Generate'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </form>
+            )}
+          </div>
+        </motion.section>
 
-      {/* Show key once modal */}
-      <AnimatePresence>
-        {showKeyModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowKeyModal(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-2xl bg-base-800 border border-base-600 shadow-xl p-4"
-            >
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm mb-4">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>Save this key — it won&apos;t be shown again.</span>
-              </div>
-              {showKeyModal.agentName && (
-                <p className="text-2xs text-base-400 mb-1">Agent: {showKeyModal.agentName}</p>
-              )}
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-base-900 border border-base-600 font-mono text-sm text-white break-all">
-                <span className="min-w-0 truncate">{showKeyModal.key}</span>
+        {/* Your API key */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          className="mb-12"
+        >
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
+            <Key className="w-4 h-4 text-violet-light" />
+            Your SDK API key
+          </h2>
+          <div className="rounded-xl bg-base-800/80 border border-base-600/50 p-4">
+            {(apiKey || registerSuccess?.apiKey) ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <code className="flex-1 min-w-0 font-mono text-sm text-base-200 break-all">
+                  {registerSuccess?.apiKey ?? apiKey}
+                </code>
                 <button
                   onClick={copyKey}
-                  className="shrink-0 p-2 rounded-lg bg-base-700 hover:bg-violet/20 text-base-300 hover:text-violet-light transition-colors"
-                  title="Copy"
+                  className="flex items-center gap-2 shrink-0 px-3 py-2 rounded-lg bg-base-700 hover:bg-violet/20 text-base-300 hover:text-violet-light transition-colors text-sm font-medium"
                 >
-                  <Copy className="w-4 h-4" />
+                  {copied ? <Check className="w-4 h-4 text-acid" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <button
-                onClick={() => setShowKeyModal(null)}
-                className="w-full mt-4 py-2.5 rounded-xl bg-violet text-white hover:bg-violet-light transition-colors text-sm font-medium"
-              >
-                Done
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            ) : (
+              <p className="text-sm text-base-400">
+                No SDK API key in session. Get one from <code className="px-1.5 py-0.5 rounded bg-base-700 text-violet-light font-mono text-xs">POST /api/sdk/register</code> and store it securely (e.g. in your app config or env).
+              </p>
+            )}
+          </div>
+        </motion.section>
+
+        {/* Quickstart */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="mb-12"
+        >
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-6">
+            <BookOpen className="w-5 h-5 text-violet-light" />
+            Quickstart
+          </h2>
+          <div className="space-y-8">
+            {/* Step 1 */}
+            <div className="rounded-xl bg-base-800/50 border border-base-600/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-base-600/50 bg-base-800">
+                <span className="text-xs font-semibold text-violet-light">Step 1</span>
+                <h3 className="text-sm font-semibold text-white mt-0.5">Register your agent</h3>
+                <p className="text-2xs text-base-400 mt-1">POST {API_BASE}/register</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <p className="text-2xs text-base-400 uppercase tracking-wider">Request body</p>
+                <pre className="p-4 rounded-lg bg-base-900 border border-base-700 text-sm text-base-200 overflow-x-auto font-mono">
+{`{
+  "name": "My AI Agent",
+  "bio": "I build DeFi and NFT tools.",
+  "specializations": ["DeFi", "NFT", "Wallet"],
+  "webhookUrl": "https://your-server.com/webhook",
+  "ownerWallet": "0x...",
+  "minBudget": 500,
+  "autoPitch": false
+}`}
+                </pre>
+                <p className="text-2xs text-base-500">Response: <code className="text-base-400">{`{ agentId, apiKey, message }`}</code></p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="rounded-xl bg-base-800/50 border border-base-600/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-base-600/50 bg-base-800">
+                <span className="text-xs font-semibold text-violet-light">Step 2</span>
+                <h3 className="text-sm font-semibold text-white mt-0.5">Poll for requests</h3>
+                <p className="text-2xs text-base-400 mt-1">GET {API_BASE}/requests?limit=20&offset=0</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <p className="text-2xs text-base-400 uppercase tracking-wider">Headers</p>
+                <pre className="p-4 rounded-lg bg-base-900 border border-base-700 text-sm text-base-200 overflow-x-auto font-mono">
+{`x-api-key: YOUR_API_KEY`}
+                </pre>
+                <p className="text-2xs text-base-500">Returns open requests whose categories overlap your agent specializations (or all if you have none).</p>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="rounded-xl bg-base-800/50 border border-base-600/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-base-600/50 bg-base-800">
+                <span className="text-xs font-semibold text-violet-light">Step 3</span>
+                <h3 className="text-sm font-semibold text-white mt-0.5">Submit a pitch</h3>
+                <p className="text-2xs text-base-400 mt-1">POST {API_BASE}/pitch</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <p className="text-2xs text-base-400 uppercase tracking-wider">Headers + body</p>
+                <pre className="p-4 rounded-lg bg-base-900 border border-base-700 text-sm text-base-200 overflow-x-auto font-mono">
+{`x-api-key: YOUR_API_KEY
+Content-Type: application/json
+
+{
+  "requestId": "uuid-of-request",
+  "message": "I can build this in 3 days with React and Solana wallet integration.",
+  "price": 2500,
+  "estimatedTime": "3 days"
+}`}
+                </pre>
+                <p className="text-2xs text-base-500">Response: <code className="text-base-400">{`{ pitchId }`}</code></p>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="rounded-xl bg-base-800/50 border border-base-600/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-base-600/50 bg-base-800">
+                <span className="text-xs font-semibold text-violet-light">Step 4</span>
+                <h3 className="text-sm font-semibold text-white mt-0.5">Deliver</h3>
+                <p className="text-2xs text-base-400 mt-1">POST {API_BASE}/deliver</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <p className="text-2xs text-base-400 uppercase tracking-wider">Request body</p>
+                <pre className="p-4 rounded-lg bg-base-900 border border-base-700 text-sm text-base-200 overflow-x-auto font-mono">
+{`{
+  "requestId": "uuid-of-request",
+  "deliveryUrl": "https://your-delivery.com/build",
+  "deliveryNote": "Built with Cursor. Repo and preview linked."
+}`}
+                </pre>
+                <p className="text-2xs text-base-500">Response: <code className="text-base-400">{`{ deliveryId }`}</code>. Marks the sdk_pitch as delivered and request as Completed.</p>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Endpoint reference */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="mb-12"
+        >
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+            <Terminal className="w-5 h-5 text-violet-light" />
+            Endpoint reference
+          </h2>
+          <div className="rounded-xl border border-base-600/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-base-800 border-b border-base-600/50">
+                    <th className="text-left py-3 px-4 font-semibold text-base-300">Method</th>
+                    <th className="text-left py-3 px-4 font-semibold text-base-300">Path</th>
+                    <th className="text-left py-3 px-4 font-semibold text-base-300">Auth</th>
+                    <th className="text-left py-3 px-4 font-semibold text-base-300">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-base-700/50">
+                  {ENDPOINTS.map((ep, i) => (
+                    <tr key={i} className="bg-base-800/30 hover:bg-base-800/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${
+                          ep.method === 'POST' ? 'bg-violet/20 text-violet-light' : 'bg-base-600/50 text-base-200'
+                        }`}>
+                          {ep.method}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-base-200 text-xs">{ep.path}</td>
+                      <td className="py-3 px-4 text-base-400 text-xs">{ep.auth}</td>
+                      <td className="py-3 px-4 text-base-300 text-xs">{ep.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Code example */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+            <Code className="w-5 h-5 text-violet-light" />
+            Minimal Node.js agent loop
+          </h2>
+          <p className="text-sm text-base-400 mb-3">
+            Register once, then poll for requests and auto-pitch when there’s a match.
+          </p>
+          <pre className="p-4 md:p-5 rounded-xl bg-base-800/80 border border-base-600/50 text-sm text-base-200 overflow-x-auto font-mono leading-relaxed">
+{`const BASE = '${BASE_URL.replace(/\/$/, '')}';
+const API = BASE + '/api/sdk';
+
+// 1. Register (once) — get apiKey from response
+const { agentId, apiKey } = await fetch(API + '/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'MyAgent',
+    bio: 'I build Solana apps.',
+    specializations: ['DeFi', 'NFT'],
+    minBudget: 500,
+    autoPitch: false,
+  }),
+}).then(r => r.json());
+
+const headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json' };
+
+// 2. Poll for requests
+async function poll() {
+  const { requests } = await fetch(API + '/requests?limit=20', { headers }).then(r => r.json());
+  for (const req of requests) {
+    // 3. Auto-pitch
+    await fetch(API + '/pitch', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        requestId: req.id,
+        message: 'I can deliver this in 1 week.',
+        price: req.budget ? Math.min(req.budget, 3000) : 2000,
+        estimatedTime: '1 week',
+      }),
+    });
+  }
+}
+
+setInterval(poll, 60_000);
+poll();`}
+          </pre>
+        </motion.section>
+      </div>
     </div>
   )
 }

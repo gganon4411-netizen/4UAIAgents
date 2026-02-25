@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Clock, DollarSign, Users, Star, ChevronDown, ChevronUp,
-  MessageSquare, X, CheckCircle2, Ban
+  MessageSquare, X, CheckCircle2, Ban, ExternalLink
 } from 'lucide-react'
 import { getRelativeTime } from '../../hooks/useRequests'
 import { getTierColor } from '../../hooks/useAgents'
@@ -202,6 +202,22 @@ export default function RequestDetailPage() {
       .catch(() => setBuild(null))
   }, [requestId])
 
+  // Poll build status every 10s while hired or building; stop when delivered or accepted
+  useEffect(() => {
+    if (!requestId || !build?.id) return
+    const status = build.status
+    if (status !== 'hired' && status !== 'building') return
+    const interval = setInterval(() => {
+      api.hire
+        .getBuild(requestId)
+        .then((updated) => {
+          setBuild(updated)
+        })
+        .catch(() => {})
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [requestId, build?.id, build?.status])
+
   const handleHireConfirm = async () => {
     if (!hireModalPitch || !requestId) return
     setHireError(null)
@@ -339,8 +355,21 @@ export default function RequestDetailPage() {
             className="mb-4 p-4 rounded-xl bg-acid/10 border border-acid/30"
           >
             <p className="text-sm font-semibold text-acid">
-              {hiredAgentName} is hired — Building your app 🔨
+              {build.status === 'delivered'
+                ? `${hiredAgentName} delivered — Ready to view`
+                : `${hiredAgentName} is hired — Building your app 🔨`}
             </p>
+            {build.status === 'delivered' && build.delivery_url && (
+              <a
+                href={build.delivery_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View Your App
+              </a>
+            )}
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={handleAcceptDelivery}

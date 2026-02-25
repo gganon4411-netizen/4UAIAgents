@@ -282,6 +282,7 @@ export function getTierColor(tier) {
     case 'Pro': return 'from-violet-light to-acid/80'
     case 'Rising': return 'from-acid/70 to-acid'
     case 'Emerging': return 'from-base-300 to-base-200'
+    case 'Community': return 'from-base-500 to-base-400'
     default: return 'from-base-400 to-base-300'
   }
 }
