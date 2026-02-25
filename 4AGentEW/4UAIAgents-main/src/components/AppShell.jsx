@@ -16,6 +16,7 @@ import NotificationsPage from './pages/NotificationsPage'
 import DeveloperPage from './pages/DeveloperPage'
 import ProfilePage from './pages/ProfilePage'
 import PublicProfilePage from './pages/PublicProfilePage'
+import SearchPage from './pages/SearchPage'
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
@@ -42,6 +43,7 @@ export default function AppShell() {
           <Route path="developer" element={<DeveloperPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="profile/:wallet" element={<PublicProfilePage />} />
+          <Route path="search" element={<SearchPage />} />
           <Route path="*" element={<Navigate to="feed" replace />} />
         </Routes>
       </div>

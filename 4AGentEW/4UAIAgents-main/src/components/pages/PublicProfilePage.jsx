@@ -4,8 +4,10 @@ import { motion } from 'framer-motion'
 import {
   User, Copy, Check, Loader2, ExternalLink,
   FileText, Briefcase, DollarSign, Twitter, Github, Globe, Bot, Trophy, ArrowLeft,
+  UserPlus, UserCheck, Users,
 } from 'lucide-react'
 import { getRelativeTime } from '../../hooks/useRequests'
+import { useWallet } from '../../hooks/useWallet'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://4u-backend-production.up.railway.app'
 
@@ -33,11 +35,18 @@ function joinDate(dateStr) {
 export default function PublicProfilePage() {
   const { wallet } = useParams()
   const navigate = useNavigate()
+  const { session, address } = useWallet()
+  const viewerWallet = session?.user?.wallet_address || address || null
 
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
+
+  // Follow state
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+  const [followCounts, setFollowCounts] = useState({ followers_count: 0, following_count: 0 })
 
   const loadProfile = useCallback(async () => {
     if (!wallet) return
@@ -58,9 +67,31 @@ export default function PublicProfilePage() {
     }
   }, [wallet])
 
+  const loadFollowData = useCallback(async () => {
+    if (!wallet) return
+    const [countsRes, statusRes] = await Promise.all([
+      fetch(`${API_BASE}/api/follows/counts?wallet=${encodeURIComponent(wallet)}`),
+      viewerWallet
+        ? fetch(`${API_BASE}/api/follows/status?follower_wallet=${encodeURIComponent(viewerWallet)}&followee_id=${encodeURIComponent(wallet)}&followee_type=user`)
+        : Promise.resolve(null),
+    ])
+    if (countsRes.ok) {
+      const counts = await countsRes.json()
+      setFollowCounts(counts)
+    }
+    if (statusRes?.ok) {
+      const status = await statusRes.json()
+      setIsFollowing(status.is_following || false)
+    }
+  }, [wallet, viewerWallet])
+
   useEffect(() => {
     loadProfile()
   }, [loadProfile])
+
+  useEffect(() => {
+    loadFollowData()
+  }, [loadFollowData])
 
   const copyWallet = () => {
     if (!profile?.wallet_address) return
@@ -69,6 +100,34 @@ export default function PublicProfilePage() {
       setTimeout(() => setCopied(false), 2000)
     })
   }
+
+  const handleFollow = async () => {
+    if (!viewerWallet || !wallet) return
+    const sessionData = JSON.parse(localStorage.getItem('4u_session') || 'null')
+    const token = sessionData?.access_token
+    if (!token) return
+
+    setFollowLoading(true)
+    try {
+      const method = isFollowing ? 'DELETE' : 'POST'
+      await fetch(`${API_BASE}/api/follows`, {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ followee_id: wallet, followee_type: 'user' }),
+      })
+      setIsFollowing(!isFollowing)
+      setFollowCounts((prev) => ({
+        ...prev,
+        followers_count: prev.followers_count + (isFollowing ? -1 : 1),
+      }))
+    } catch {
+      // ignore
+    } finally {
+      setFollowLoading(false)
+    }
+  }
+
+  const isOwnProfile = viewerWallet && profile?.wallet_address && viewerWallet === profile.wallet_address
 
   if (loading) {
     return (
@@ -138,12 +197,35 @@ export default function PublicProfilePage() {
 
             {/* Identity */}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-white truncate">
-                {profile?.display_name || 'Anonymous Builder'}
-              </h1>
-              {profile?.username && (
-                <p className="text-sm text-base-400 font-mono mt-0.5">@{profile.username}</p>
-              )}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold text-white truncate">
+                    {profile?.display_name || 'Anonymous Builder'}
+                  </h1>
+                  {profile?.username && (
+                    <p className="text-sm text-base-400 font-mono mt-0.5">@{profile.username}</p>
+                  )}
+                </div>
+                {/* Follow button */}
+                {viewerWallet && !isOwnProfile && (
+                  <button
+                    onClick={handleFollow}
+                    disabled={followLoading}
+                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 ${
+                      isFollowing
+                        ? 'bg-base-700 text-base-200 hover:bg-red-500/20 hover:text-red-400 border border-base-600 hover:border-red-500/30'
+                        : 'bg-violet text-white hover:bg-violet-light'
+                    }`}
+                  >
+                    {isFollowing ? (
+                      <><UserCheck className="w-3.5 h-3.5" /> Following</>
+                    ) : (
+                      <><UserPlus className="w-3.5 h-3.5" /> Follow</>
+                    )}
+                  </button>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 mt-2">
                 <span className="font-mono text-2xs text-base-500">
                   {truncateWallet(profile?.wallet_address)}
@@ -156,6 +238,24 @@ export default function PublicProfilePage() {
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
+
+              {/* Follower / following counts */}
+              <div className="flex items-center gap-4 mt-2">
+                <button
+                  className="flex items-center gap-1 text-2xs text-base-400 hover:text-white transition-colors"
+                >
+                  <Users className="w-3 h-3" />
+                  <span className="font-mono font-semibold text-white">{followCounts.followers_count}</span>
+                  <span>followers</span>
+                </button>
+                <button
+                  className="flex items-center gap-1 text-2xs text-base-400 hover:text-white transition-colors"
+                >
+                  <span className="font-mono font-semibold text-white">{followCounts.following_count}</span>
+                  <span>following</span>
+                </button>
+              </div>
+
               {profile?.created_at && (
                 <p className="text-2xs text-base-500 mt-2">Joined {joinDate(profile.created_at)}</p>
               )}

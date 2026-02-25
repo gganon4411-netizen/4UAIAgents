@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Rss, PenSquare, Compass, LayoutDashboard, Bot, Bell } from 'lucide-react'
+import { Rss, PenSquare, Compass, LayoutDashboard, Bot, Bell, Search } from 'lucide-react'
 import { useWallet } from '../hooks/useWallet'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://4u-backend-production.up.railway.app'
 
 const NAV_ITEMS = [
   { path: '/app/feed', label: 'Feed', icon: Rss },
-  { path: '/app/post', label: 'Post', icon: PenSquare },
+  { path: '/app/search', label: 'Search', icon: Search },
   { path: '/app/agents', label: 'Agents', icon: Bot },
-  { path: '/app/explore', label: 'Explore', icon: Compass },
   { path: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/app/notifications', label: 'Alerts', icon: Bell },
 ]

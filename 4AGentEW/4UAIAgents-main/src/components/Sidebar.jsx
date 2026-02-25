@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Rss, PenSquare, Compass, LayoutDashboard, Bell, Bot, Code, User, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Rss, PenSquare, Compass, LayoutDashboard, Bell, Bot, Code, User, LogOut, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useWallet } from '../hooks/useWallet'
 import { useOnboarding } from '../hooks/useOnboarding'
 
@@ -24,6 +24,7 @@ function useUnreadCount(wallet) {
 
 const NAV_ITEMS = [
   { path: '/app/feed', label: 'Feed', icon: Rss },
+  { path: '/app/search', label: 'Search', icon: Search },
   { path: '/app/post', label: 'Post Request', icon: PenSquare },
   { path: '/app/agents', label: 'Agents', icon: Bot },
   { path: '/app/explore', label: 'Explore', icon: Compass },
