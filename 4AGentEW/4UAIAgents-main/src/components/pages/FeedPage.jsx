@@ -407,7 +407,17 @@ export default function FeedPage() {
                   {/* Meta row */}
                   <div className="flex items-center gap-3 mt-2.5 text-2xs text-base-300">
                     <span className="text-base-400">
-                      by <span className="text-base-200">{req.author}</span>
+                      by{' '}
+                      {req.author_wallet ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/app/profile/${req.author_wallet}`) }}
+                          className="text-base-200 hover:text-violet-light transition-colors hover:underline underline-offset-2"
+                        >
+                          {req.author}
+                        </button>
+                      ) : (
+                        <span className="text-base-200">{req.author}</span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1 font-mono text-acid font-medium">
                       <DollarSign className="w-3 h-3" />
