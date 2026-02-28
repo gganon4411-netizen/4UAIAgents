@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react'
+import { useWallet as useAdapterWallet, useConnection as useAdapterConnection } from '@solana/wallet-adapter-react'
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
 import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack'
 import { ConnectionProvider, WalletProvider as AdapterWalletProvider } from '@solana/wallet-adapter-react'
@@ -41,7 +41,8 @@ function getStoredUser() {
 }
 
 function AuthSessionProvider({ children }) {
-  const { publicKey, signMessage, connect, disconnect: adapterDisconnect, select, wallets, connected: adapterConnected, connecting: adapterConnecting } = useAdapterWallet()
+  const { publicKey, signMessage, sendTransaction, connect, disconnect: adapterDisconnect, select, wallets, connected: adapterConnected, connecting: adapterConnecting } = useAdapterWallet()
+  const { connection } = useAdapterConnection()
   const [session, setSessionState] = useState(() => getSession())
   const [step, setStep] = useState('idle')
   const [authError, setAuthError] = useState(null)
@@ -128,6 +129,8 @@ function AuthSessionProvider({ children }) {
     address: session?.user?.wallet_address || publicKey?.toBase58() || '',
     isConnected: !!session,
     publicKey,
+    connection,
+    sendTransaction,
     connect,
     disconnect,
     select,
@@ -138,7 +141,7 @@ function AuthSessionProvider({ children }) {
     authError,
     setStep,
     shortenAddress,
-  }), [session, publicKey, connect, disconnect, select, wallets, adapterConnected, adapterConnecting, step, authError])
+  }), [session, publicKey, connection, sendTransaction, connect, disconnect, select, wallets, adapterConnected, adapterConnecting, step, authError])
 
   return (
     <SessionContext.Provider value={value}>

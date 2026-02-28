@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Clock, DollarSign, Users, Star, ChevronDown, ChevronUp,
-  MessageSquare, X, CheckCircle2, Ban, ExternalLink
+  MessageSquare, X, CheckCircle2, Ban, ExternalLink, AlertTriangle,
+  RefreshCw, Shield, Loader2, Link as LinkIcon
 } from 'lucide-react'
 import { getRelativeTime } from '../../hooks/useRequests'
 import { getTierColor } from '../../hooks/useAgents'
 import { useWallet } from '../../hooks/useWallet'
+import { sendUsdcToEscrow } from '../../lib/escrow'
 import api from '../../lib/api'
 
 const STATUS_COLORS = {
@@ -158,10 +160,33 @@ function RequestDetailSkeleton() {
   )
 }
 
+const ESCROW_STATUS_LABELS = {
+  locked: { text: 'Escrow Locked', cls: 'bg-violet/10 text-violet-light border-violet/20' },
+  released: { text: 'Escrow Released', cls: 'bg-acid/10 text-acid border-acid/20' },
+  refunded: { text: 'Escrow Refunded', cls: 'bg-base-600/30 text-base-200 border-base-500/30' },
+  disputed_hold: { text: 'Escrow Frozen (Dispute)', cls: 'bg-red-500/10 text-red-400 border-red-500/20' },
+}
+
+function SolanaTxLink({ signature, label }) {
+  if (!signature) return null
+  const network = (import.meta.env.VITE_SOLANA_RPC_URL || '').includes('devnet') ? '?cluster=devnet' : ''
+  return (
+    <a
+      href={`https://solscan.io/tx/${signature}${network}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-2xs text-violet-light hover:text-white transition-colors"
+    >
+      <LinkIcon className="w-3 h-3" />
+      {label}
+    </a>
+  )
+}
+
 export default function RequestDetailPage() {
   const { requestId } = useParams()
   const navigate = useNavigate()
-  const { session, address } = useWallet()
+  const { session, address, publicKey, connection, sendTransaction } = useWallet()
   const [request, setRequest] = useState(null)
   const [pitches, setPitches] = useState([])
   const [build, setBuild] = useState(null)
@@ -169,8 +194,11 @@ export default function RequestDetailPage() {
   const [error, setError] = useState(null)
   const [hireModalPitch, setHireModalPitch] = useState(null)
   const [hireSubmitting, setHireSubmitting] = useState(false)
+  const [hireStep, setHireStep] = useState(null)
   const [hireError, setHireError] = useState(null)
   const [buildActionSubmitting, setBuildActionSubmitting] = useState(false)
+  const [disputeReason, setDisputeReason] = useState('')
+  const [showDisputeInput, setShowDisputeInput] = useState(false)
 
   const isAuthor =
     request?.author_wallet &&
@@ -220,16 +248,52 @@ export default function RequestDetailPage() {
 
   const handleHireConfirm = async () => {
     if (!hireModalPitch || !requestId) return
+    if (!publicKey || !connection || !sendTransaction) {
+      setHireError('Connect your wallet to hire an agent')
+      return
+    }
     setHireError(null)
     setHireSubmitting(true)
     try {
-      const newBuild = await api.hire.hire(requestId, hireModalPitch.id)
+      const price = hireModalPitch.price ?? 0
+
+      let txSignature = null
+      if (price > 0) {
+        setHireStep('Fetching escrow info...')
+        const info = await api.hire.escrowInfo()
+        if (!info.escrowWallet || !info.usdcMint) {
+          throw new Error('Escrow wallet is not configured on the server')
+        }
+
+        setHireStep('Approve the USDC transfer in your wallet...')
+        txSignature = await sendUsdcToEscrow(
+          connection,
+          sendTransaction,
+          publicKey,
+          price,
+          info.escrowWallet,
+          info.usdcMint
+        )
+        setHireStep('Verifying deposit on-chain...')
+      } else {
+        setHireStep('Confirming hire...')
+        txSignature = 'zero-amount-no-tx'
+      }
+
+      const newBuild = await api.hire.hire(requestId, hireModalPitch.id, txSignature)
       setBuild(newBuild)
       setHireModalPitch(null)
+      if (request) setRequest({ ...request, status: 'In Progress' })
     } catch (err) {
-      setHireError(err.message || 'Failed to hire')
+      const msg = err.message || 'Failed to hire'
+      if (msg.includes('User rejected')) {
+        setHireError('Transaction cancelled by wallet')
+      } else {
+        setHireError(msg)
+      }
     } finally {
       setHireSubmitting(false)
+      setHireStep(null)
     }
   }
 
@@ -240,6 +304,8 @@ export default function RequestDetailPage() {
       const updated = await api.hire.accept(build.id)
       setBuild(updated)
       if (request) setRequest({ ...request, status: 'Completed' })
+    } catch (err) {
+      console.error('Accept failed:', err)
     } finally {
       setBuildActionSubmitting(false)
     }
@@ -252,6 +318,36 @@ export default function RequestDetailPage() {
       await api.hire.cancel(build.id)
       setBuild(null)
       if (request) setRequest({ ...request, status: 'Open', hired_agent_id: null })
+    } catch (err) {
+      console.error('Cancel failed:', err)
+    } finally {
+      setBuildActionSubmitting(false)
+    }
+  }
+
+  const handleRequestRevision = async () => {
+    if (!build?.id) return
+    setBuildActionSubmitting(true)
+    try {
+      const updated = await api.hire.requestRevision(build.id)
+      setBuild(updated)
+    } catch (err) {
+      console.error('Revision request failed:', err)
+    } finally {
+      setBuildActionSubmitting(false)
+    }
+  }
+
+  const handleDispute = async () => {
+    if (!build?.id || !disputeReason.trim()) return
+    setBuildActionSubmitting(true)
+    try {
+      const updated = await api.hire.dispute(build.id, disputeReason.trim())
+      setBuild(updated)
+      setShowDisputeInput(false)
+      setDisputeReason('')
+    } catch (err) {
+      console.error('Dispute failed:', err)
     } finally {
       setBuildActionSubmitting(false)
     }
@@ -348,59 +444,158 @@ export default function RequestDetailPage() {
         </div>
 
         {/* Build status card */}
-        {hasBuild && hiredAgentName && build.status !== 'accepted' && (
+        {hasBuild && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 rounded-xl bg-acid/10 border border-acid/30"
+            className="mb-4 p-4 rounded-xl bg-base-800/60 border border-base-600/50"
           >
-            <p className="text-sm font-semibold text-acid">
-              {build.status === 'delivered'
-                ? `${hiredAgentName} delivered — Ready to view`
-                : `${hiredAgentName} is hired — Building your app 🔨`}
+            {/* Status + escrow badges */}
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <span className={`px-2.5 py-1 rounded-lg text-2xs font-medium border ${
+                build.status === 'accepted' ? 'bg-acid/10 text-acid border-acid/20' :
+                build.status === 'delivered' ? 'bg-violet/10 text-violet-light border-violet/20' :
+                build.status === 'disputed' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                build.status === 'revision_requested' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                build.status === 'cancelled' ? 'bg-base-600/30 text-base-400 border-base-500/30' :
+                'bg-violet/10 text-violet-light border-violet/20'
+              }`}>
+                {build.status === 'hired' ? 'Hired — Building' :
+                 build.status === 'building' ? 'Building' :
+                 build.status === 'delivered' ? 'Delivered' :
+                 build.status === 'accepted' ? 'Accepted' :
+                 build.status === 'disputed' ? 'Disputed' :
+                 build.status === 'revision_requested' ? 'Revision Requested' :
+                 build.status}
+              </span>
+              {build.escrow_status && ESCROW_STATUS_LABELS[build.escrow_status] && (
+                <span className={`px-2.5 py-1 rounded-lg text-2xs font-medium border ${ESCROW_STATUS_LABELS[build.escrow_status].cls}`}>
+                  {ESCROW_STATUS_LABELS[build.escrow_status].text}
+                </span>
+              )}
+              {build.escrow_amount != null && build.escrow_amount > 0 && (
+                <span className="text-2xs font-mono text-acid">{Number(build.escrow_amount).toLocaleString()} USDC</span>
+              )}
+            </div>
+
+            {/* Agent name */}
+            <p className="text-sm font-semibold text-white mb-2">
+              {build.agent_name || hiredAgentName || 'Agent'}
             </p>
-            {build.status === 'delivered' && build.delivery_url && (
+
+            {/* Delivery link */}
+            {build.delivery_url && (
               <a
                 href={build.delivery_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 mt-3 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-1.5 mb-3 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                View Your App
+                View Delivery
               </a>
             )}
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                onClick={handleAcceptDelivery}
-                disabled={buildActionSubmitting}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Accept Delivery
-              </button>
-              <button
-                onClick={handleCancelBuild}
-                disabled={buildActionSubmitting}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
-              >
-                <Ban className="w-3.5 h-3.5" />
-                Cancel
-              </button>
-            </div>
-          </motion.div>
-        )}
 
-        {hasBuild && build.status === 'accepted' && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 rounded-xl bg-acid/10 border border-acid/30"
-          >
-            <p className="text-sm font-semibold text-acid">
-              <CheckCircle2 className="w-4 h-4 inline-block mr-1.5 align-middle" />
-              Build accepted — {hiredAgentName} delivered
-            </p>
+            {/* Tx links */}
+            <div className="flex gap-3 flex-wrap mb-3">
+              <SolanaTxLink signature={build.deposit_tx_signature} label="Deposit Tx" />
+              <SolanaTxLink signature={build.release_tx_signature} label="Release Tx" />
+              <SolanaTxLink signature={build.refund_tx_signature} label="Refund Tx" />
+            </div>
+
+            {/* Payout info for accepted */}
+            {build.status === 'accepted' && build.agent_payout != null && (
+              <p className="text-2xs text-base-400 mb-3">
+                Agent payout: <span className="text-acid font-mono">{Number(build.agent_payout).toLocaleString()} USDC</span>
+                {' '} | Platform fee: <span className="font-mono">{Number(build.platform_fee || 0).toLocaleString()} USDC</span>
+              </p>
+            )}
+
+            {/* Action buttons — only for author */}
+            {isAuthor && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {build.status === 'delivered' && (
+                  <>
+                    <button
+                      onClick={handleAcceptDelivery}
+                      disabled={buildActionSubmitting}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Accept & Release Escrow
+                    </button>
+                    <button
+                      onClick={handleRequestRevision}
+                      disabled={buildActionSubmitting}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Request Revision
+                    </button>
+                    <button
+                      onClick={() => setShowDisputeInput(true)}
+                      disabled={buildActionSubmitting || showDisputeInput}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Dispute
+                    </button>
+                  </>
+                )}
+
+                {(build.status === 'hired' || build.status === 'building') && (
+                  <button
+                    onClick={handleCancelBuild}
+                    disabled={buildActionSubmitting}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    Cancel & Refund
+                  </button>
+                )}
+
+                {build.status === 'disputed' && (
+                  <p className="text-xs text-red-400 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5" />
+                    Dispute in progress — escrow is frozen until resolved
+                  </p>
+                )}
+
+                {build.status === 'revision_requested' && (
+                  <p className="text-xs text-yellow-400">
+                    Waiting for agent to submit revised delivery...
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Dispute reason input */}
+            {showDisputeInput && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                  placeholder="Describe the issue with this delivery..."
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg bg-base-900 border border-base-600 text-white placeholder-base-500 text-xs resize-y"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDispute}
+                    disabled={buildActionSubmitting || !disputeReason.trim()}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                  >
+                    Submit Dispute
+                  </button>
+                  <button
+                    onClick={() => { setShowDisputeInput(false); setDisputeReason('') }}
+                    className="px-3 py-2 rounded-xl text-xs text-base-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -462,12 +657,17 @@ export default function RequestDetailPage() {
                 </p>
               </div>
               <p className="mt-4 text-xs text-base-300 leading-relaxed">
-                Your escrow of{' '}
-                <span className="font-semibold text-violet-light">
-                  {(hireModalPitch.price ?? 0).toLocaleString()} USDC
-                </span>{' '}
-                will be locked until you accept delivery.
+                {(hireModalPitch.price ?? 0) > 0
+                  ? <>Your wallet will sign a <span className="font-semibold text-violet-light">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</span> transfer to the escrow wallet. Funds are locked until you accept delivery.</>
+                  : <>This hire has no escrow amount. Click confirm to proceed.</>
+                }
               </p>
+              {hireStep && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-violet-light">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {hireStep}
+                </div>
+              )}
               {hireError && (
                 <p className="mt-3 text-xs text-red-400">{hireError}</p>
               )}
@@ -481,10 +681,10 @@ export default function RequestDetailPage() {
                 </button>
                 <button
                   onClick={handleHireConfirm}
-                  disabled={hireSubmitting}
+                  disabled={hireSubmitting || !publicKey}
                   className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
                 >
-                  {hireSubmitting ? 'Hiring…' : 'Confirm'}
+                  {hireSubmitting ? 'Processing…' : `Pay & Hire`}
                 </button>
               </div>
             </motion.div>

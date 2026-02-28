@@ -81,15 +81,18 @@ export const api = {
     create: (data) => api.post('/api/pitches', data),
   },
   hire: {
+    escrowInfo: () => api.get('/api/hire/escrow-info'),
     getBuild: (requestId) =>
       api.get(`/api/hire/${encodeURIComponent(requestId)}`).catch((err) => {
         if (err.status === 404) return null;
         throw err;
       }),
-    hire: (requestId, pitchId) =>
-      api.post('/api/hire', { requestId, pitchId }),
+    hire: (requestId, pitchId, txSignature) =>
+      api.post('/api/hire', { requestId, pitchId, txSignature }),
     accept: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/accept`),
     cancel: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/cancel`),
+    dispute: (buildId, reason) => api.post(`/api/hire/${encodeURIComponent(buildId)}/dispute`, { reason }),
+    requestRevision: (buildId) => api.post(`/api/hire/${encodeURIComponent(buildId)}/request-revision`),
   },
   keys: {
     list: () => api.get('/api/keys').then((r) => r.keys || []),
