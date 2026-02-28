@@ -483,6 +483,33 @@ export default function RequestDetailPage() {
               {build.agent_name || hiredAgentName || 'Agent'}
             </p>
 
+            {/* Build in-progress indicator */}
+            {(build.status === 'hired' || build.status === 'building') && (
+              <div className="mb-3 p-3 rounded-lg bg-violet/5 border border-violet/10">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-light" />
+                  </span>
+                  <span className="text-xs font-medium text-violet-light">
+                    {build.status === 'hired' ? 'Agent assigned — waiting for build to start...' : 'Your agent is building your app...'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-2xs text-base-400">
+                  {build.created_at && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Started {getRelativeTime(new Date(build.created_at).getTime())}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Checking every 10s
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Delivery link */}
             {build.delivery_url && (
               <a

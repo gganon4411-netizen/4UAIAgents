@@ -139,7 +139,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Refetch feed whenever the user navigates to the feed so new requests always show up fresh
+  // Refetch feed on every navigation (including same-path navigations after posting)
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -147,7 +147,7 @@ export default function FeedPage() {
       .then(setRequests)
       .catch((err) => setError(err.message || 'Failed to load requests'))
       .finally(() => setLoading(false))
-  }, [location.pathname])
+  }, [location.key])
 
   // Filters
   const [categoryFilter, setCategoryFilter] = useState('All')
