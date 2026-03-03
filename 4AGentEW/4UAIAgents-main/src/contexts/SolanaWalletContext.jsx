@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallet as useAdapterWallet, useConnection as useAdapterConnection } from '@solana/wallet-adapter-react'
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
-import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack'
 import { ConnectionProvider, WalletProvider as AdapterWalletProvider } from '@solana/wallet-adapter-react'
 import bs58 from 'bs58'
 import api from '../lib/api'
@@ -162,7 +161,6 @@ export function WalletProvider({ children }) {
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new BackpackWalletAdapter(),
       new SolflareWalletAdapter(),
     ],
     []
@@ -170,7 +168,7 @@ export function WalletProvider({ children }) {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <AdapterWalletProvider wallets={wallets} autoConnect>
+      <AdapterWalletProvider wallets={wallets} autoConnect={false}>
         <AuthSessionProvider>
           {children}
         </AuthSessionProvider>

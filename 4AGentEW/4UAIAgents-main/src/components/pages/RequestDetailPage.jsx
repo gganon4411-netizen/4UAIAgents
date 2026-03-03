@@ -4,12 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Clock, DollarSign, Users, Star, ChevronDown, ChevronUp,
   MessageSquare, X, CheckCircle2, Ban, ExternalLink, AlertTriangle,
-  RefreshCw, Shield, Loader2, Link as LinkIcon
+  RefreshCw, Shield, Loader2, Link as LinkIcon, Copy, Check
 } from 'lucide-react'
 import { getRelativeTime } from '../../hooks/useRequests'
 import { getTierColor } from '../../hooks/useAgents'
 import { useWallet } from '../../hooks/useWallet'
-import { sendUsdcToEscrow } from '../../lib/escrow'
 import api from '../../lib/api'
 
 const STATUS_COLORS = {
@@ -186,15 +185,19 @@ function SolanaTxLink({ signature, label }) {
 export default function RequestDetailPage() {
   const { requestId } = useParams()
   const navigate = useNavigate()
-  const { session, address, publicKey, connection, sendTransaction, connect } = useWallet()
+  const { session, address } = useWallet()
   const [request, setRequest] = useState(null)
   const [pitches, setPitches] = useState([])
   const [build, setBuild] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // Hire modal — 2-step manual escrow
   const [hireModalPitch, setHireModalPitch] = useState(null)
+  const [hireModalStep, setHireModalStep] = useState(1)
+  const [escrowInfo, setEscrowInfo] = useState(null)
+  const [txSigInput, setTxSigInput] = useState('')
+  const [copied, setCopied] = useState(false)
   const [hireSubmitting, setHireSubmitting] = useState(false)
-  const [hireStep, setHireStep] = useState(null)
   const [hireError, setHireError] = useState(null)
   const [buildActionSubmitting, setBuildActionSubmitting] = useState(false)
   const [disputeReason, setDisputeReason] = useState('')
@@ -246,54 +249,40 @@ export default function RequestDetailPage() {
     return () => clearInterval(interval)
   }, [requestId, build?.id, build?.status])
 
-  const handleHireConfirm = async () => {
+  // Load escrow info when hire modal opens
+  useEffect(() => {
+    if (!hireModalPitch) return
+    setHireModalStep(1)
+    setTxSigInput('')
+    setHireError(null)
+    setCopied(false)
+    api.hire.escrowInfo().then(setEscrowInfo).catch(() => setEscrowInfo(null))
+  }, [hireModalPitch?.id])
+
+  const handleCopyEscrow = () => {
+    if (!escrowInfo?.escrowWallet) return
+    navigator.clipboard.writeText(escrowInfo.escrowWallet).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const handleHireSubmit = async () => {
+    const sig = txSigInput.trim()
+    if (!sig) { setHireError('Please paste your transaction signature'); return }
     if (!hireModalPitch || !requestId) return
-    if (!publicKey || !connection || !sendTransaction) {
-      setHireError('Connect your wallet to hire an agent')
-      return
-    }
     setHireError(null)
     setHireSubmitting(true)
     try {
-      const price = hireModalPitch.price ?? 0
-
-      let txSignature = null
-      if (price > 0) {
-        setHireStep('Fetching escrow info...')
-        const info = await api.hire.escrowInfo()
-        if (!info.escrowWallet || !info.usdcMint) {
-          throw new Error('Escrow wallet is not configured on the server')
-        }
-
-        setHireStep('Approve the USDC transfer in your wallet...')
-        txSignature = await sendUsdcToEscrow(
-          connection,
-          sendTransaction,
-          publicKey,
-          price,
-          info.escrowWallet,
-          info.usdcMint
-        )
-        setHireStep('Verifying deposit on-chain...')
-      } else {
-        setHireStep('Confirming hire...')
-        txSignature = 'zero-amount-no-tx'
-      }
-
-      const newBuild = await api.hire.hire(requestId, hireModalPitch.id, txSignature)
+      const newBuild = await api.hire.hire(requestId, hireModalPitch.id, sig)
       setBuild(newBuild)
       setHireModalPitch(null)
+      setTxSigInput('')
       if (request) setRequest({ ...request, status: 'In Progress' })
     } catch (err) {
-      const msg = err.message || 'Failed to hire'
-      if (msg.includes('User rejected')) {
-        setHireError('Transaction cancelled by wallet')
-      } else {
-        setHireError(msg)
-      }
+      setHireError(err.message || 'Failed to confirm hire. Check your tx signature.')
     } finally {
       setHireSubmitting(false)
-      setHireStep(null)
     }
   }
 
@@ -649,7 +638,7 @@ export default function RequestDetailPage() {
         )}
       </div>
 
-      {/* Hire confirmation modal */}
+      {/* Hire modal — 2-step manual escrow */}
       <AnimatePresence>
         {hireModalPitch && (
           <motion.div
@@ -672,63 +661,133 @@ export default function RequestDetailPage() {
               >
                 <X className="w-4 h-4" />
               </button>
-              <h3 className="text-base font-bold mb-3">Hire {hireModalPitch.agentName}</h3>
-              <div className="space-y-2 text-sm text-base-200">
-                <p className="flex justify-between">
-                  <span className="text-base-400">Price</span>
-                  <span className="font-mono text-acid">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-base-400">Estimated time</span>
-                  <span>{hireModalPitch.estimatedTime || '—'}</span>
-                </p>
+
+              {/* Step indicators */}
+              <div className="flex items-center gap-2 mb-4">
+                {[1, 2].map((s) => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-2xs font-bold transition-colors ${
+                      hireModalStep === s ? 'bg-violet text-white' :
+                      hireModalStep > s ? 'bg-acid text-base-900' : 'bg-base-700 text-base-400'
+                    }`}>{hireModalStep > s ? <Check className="w-3 h-3" /> : s}</div>
+                    {s < 2 && <div className={`h-px w-6 transition-colors ${hireModalStep > s ? 'bg-acid' : 'bg-base-700'}`} />}
+                  </div>
+                ))}
+                <span className="ml-2 text-2xs text-base-400">
+                  {hireModalStep === 1 ? 'Send USDC' : 'Confirm Tx'}
+                </span>
               </div>
-              <p className="mt-4 text-xs text-base-300 leading-relaxed">
-                {(hireModalPitch.price ?? 0) > 0
-                  ? <>Your wallet will sign a <span className="font-semibold text-violet-light">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</span> transfer to the escrow wallet. Funds are locked until you accept delivery.</>
-                  : <>This hire has no escrow amount. Click confirm to proceed.</>
-                }
-              </p>
-              {!publicKey && (
-                <p className="mt-3 text-xs text-yellow-400 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  Wallet not connected. Connect your wallet to proceed with payment.
-                </p>
-              )}
-              {hireStep && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-violet-light">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {hireStep}
-                </div>
-              )}
-              {hireError && (
-                <p className="mt-3 text-xs text-red-400">{hireError}</p>
-              )}
-              <div className="flex gap-2 mt-5">
-                <button
-                  onClick={() => !hireSubmitting && setHireModalPitch(null)}
-                  disabled={hireSubmitting}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 transition-colors disabled:opacity-50"
-                >
-                  Back
-                </button>
-                {!publicKey ? (
-                  <button
-                    onClick={() => { try { connect() } catch (_) {} }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity"
+
+              {hireModalStep === 1 ? (
+                <>
+                  <h3 className="text-base font-bold mb-1">Send USDC to Escrow</h3>
+                  <p className="text-2xs text-base-400 mb-4">
+                    Send exactly <span className="text-acid font-mono font-semibold">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</span> to the escrow wallet using your Phantom or Solflare wallet, then click continue.
+                  </p>
+
+                  <div className="mb-3 p-3 rounded-xl bg-base-900 border border-base-600/50">
+                    <p className="text-2xs text-base-400 mb-0.5">Amount to send</p>
+                    <p className="text-lg font-bold font-mono text-acid">{(hireModalPitch.price ?? 0).toLocaleString()} USDC</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <p className="text-2xs text-base-400 mb-1">Escrow wallet address</p>
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-base-900 border border-base-600/50">
+                      <code className="flex-1 text-2xs text-white font-mono break-all">
+                        {escrowInfo?.escrowWallet ?? 'Loading...'}
+                      </code>
+                      <button
+                        onClick={handleCopyEscrow}
+                        disabled={!escrowInfo?.escrowWallet}
+                        className="shrink-0 p-1.5 rounded-lg bg-base-700 hover:bg-base-600 transition-colors disabled:opacity-40"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-acid" /> : <Copy className="w-3.5 h-3.5 text-base-300" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {escrowInfo?.usdcMint && (
+                    <div className="mb-3">
+                      <p className="text-2xs text-base-400 mb-1">USDC mint (devnet)</p>
+                      <code className="block text-2xs text-base-300 font-mono break-all px-3 py-2 rounded-xl bg-base-900 border border-base-600/30">
+                        {escrowInfo.usdcMint}
+                      </code>
+                    </div>
+                  )}
+
+                  <a
+                    href="https://faucet.solana.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-2xs text-violet-light hover:text-white transition-colors mb-4"
                   >
-                    Connect Wallet
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleHireConfirm}
-                    disabled={hireSubmitting}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
-                  >
-                    {hireSubmitting ? 'Processing…' : `Pay & Hire`}
-                  </button>
-                )}
-              </div>
+                    <ExternalLink className="w-3 h-3" />
+                    Need devnet USDC? Use the faucet
+                  </a>
+
+                  {hireError && <p className="mb-3 text-xs text-red-400">{hireError}</p>}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setHireModalPitch(null)}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { setHireModalStep(2); setHireError(null) }}
+                      disabled={!escrowInfo}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
+                    >
+                      I've Sent the USDC →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-base font-bold mb-1">Confirm Transaction</h3>
+                  <p className="text-2xs text-base-400 mb-4">
+                    Paste the Solana transaction signature from your wallet to verify the deposit.
+                  </p>
+
+                  <div className="mb-4">
+                    <p className="text-2xs text-base-400 mb-1">Transaction signature</p>
+                    <textarea
+                      value={txSigInput}
+                      onChange={(e) => setTxSigInput(e.target.value)}
+                      placeholder="e.g. 5J7x3GhH..."
+                      rows={3}
+                      className="w-full px-3 py-2.5 rounded-xl bg-base-900 border border-base-600 text-white placeholder-base-600 text-xs font-mono resize-none focus:outline-none focus:border-violet/50 transition-colors"
+                    />
+                    <p className="text-2xs text-base-500 mt-1">Find this in your wallet's transaction history or on Solscan.</p>
+                  </div>
+
+                  {hireError && <p className="mb-3 text-xs text-red-400">{hireError}</p>}
+                  {hireSubmitting && (
+                    <div className="mb-3 flex items-center gap-2 text-xs text-violet-light">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Verifying &amp; confirming hire...
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setHireModalStep(1); setHireError(null) }}
+                      disabled={hireSubmitting}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 transition-colors disabled:opacity-50"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      onClick={handleHireSubmit}
+                      disabled={hireSubmitting || !txSigInput.trim()}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {hireSubmitting ? 'Verifying…' : 'Verify & Hire Agent'}
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
