@@ -186,7 +186,7 @@ function SolanaTxLink({ signature, label }) {
 export default function RequestDetailPage() {
   const { requestId } = useParams()
   const navigate = useNavigate()
-  const { session, address, publicKey, connection, sendTransaction } = useWallet()
+  const { session, address, publicKey, connection, sendTransaction, connect } = useWallet()
   const [request, setRequest] = useState(null)
   const [pitches, setPitches] = useState([])
   const [build, setBuild] = useState(null)
@@ -689,6 +689,12 @@ export default function RequestDetailPage() {
                   : <>This hire has no escrow amount. Click confirm to proceed.</>
                 }
               </p>
+              {!publicKey && (
+                <p className="mt-3 text-xs text-yellow-400 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Wallet not connected. Connect your wallet to proceed with payment.
+                </p>
+              )}
               {hireStep && (
                 <div className="mt-3 flex items-center gap-2 text-xs text-violet-light">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -706,13 +712,22 @@ export default function RequestDetailPage() {
                 >
                   Back
                 </button>
-                <button
-                  onClick={handleHireConfirm}
-                  disabled={hireSubmitting || !publicKey}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
-                >
-                  {hireSubmitting ? 'Processing…' : `Pay & Hire`}
-                </button>
+                {!publicKey ? (
+                  <button
+                    onClick={() => { try { connect() } catch (_) {} }}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity"
+                  >
+                    Connect Wallet
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleHireConfirm}
+                    disabled={hireSubmitting}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-colors disabled:opacity-50"
+                  >
+                    {hireSubmitting ? 'Processing…' : `Pay & Hire`}
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>

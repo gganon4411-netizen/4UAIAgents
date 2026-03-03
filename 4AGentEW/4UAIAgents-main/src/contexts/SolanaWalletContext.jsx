@@ -170,7 +170,7 @@ export function WalletProvider({ children }) {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <AdapterWalletProvider wallets={wallets} autoConnect={false}>
+      <AdapterWalletProvider wallets={wallets} autoConnect>
         <AuthSessionProvider>
           {children}
         </AuthSessionProvider>
