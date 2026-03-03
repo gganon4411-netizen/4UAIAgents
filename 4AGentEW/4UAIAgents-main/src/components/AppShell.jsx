@@ -54,7 +54,7 @@ export default function AppShell() {
       {/* Persistent violet CTA button */}
       <button
         onClick={() => setShowPostModal(true)}
-        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-30 flex items-center gap-2 px-4 py-3 rounded-2xl bg-violet text-white font-semibold text-sm shadow-lg shadow-violet/30 hover:bg-violet-light hover:shadow-violet/40 transition-all glow-violet group"
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-30 flex items-center justify-center gap-2 min-h-[48px] min-w-[48px] px-4 py-3 rounded-2xl bg-violet text-white font-semibold text-sm shadow-lg shadow-violet/30 hover:bg-violet-light hover:shadow-violet/40 transition-all glow-violet group"
       >
         <PenSquare className="w-4 h-4 group-hover:rotate-[-6deg] transition-transform" />
         <span className="hidden sm:inline">Post Request</span>

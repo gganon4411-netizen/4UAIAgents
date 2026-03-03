@@ -120,7 +120,7 @@ export default function NotificationsPage() {
           {unread > 0 && (
             <button
               onClick={markAllRead}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-violet-light hover:bg-violet/10 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-xs text-violet-light hover:bg-violet/10 transition-all"
             >
               <Check className="w-3.5 h-3.5" />
               Mark all read
@@ -135,7 +135,7 @@ export default function NotificationsPage() {
           <button
             key={tab.key}
             onClick={() => setFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            className={`px-3 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-all ${
               filter === tab.key
                 ? 'bg-violet text-white'
                 : 'bg-base-700/50 text-base-300 hover:text-white hover:bg-base-700'

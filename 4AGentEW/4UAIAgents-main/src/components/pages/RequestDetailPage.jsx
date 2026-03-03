@@ -119,7 +119,7 @@ function PitchCard({ pitch, index, navigate, isAuthor, hasBuild, onHire }) {
           {showHireButton && (
             <button
               onClick={() => onHire(pitch)}
-              className="mt-3 px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-all"
+              className="mt-3 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold bg-violet text-white hover:bg-violet-light transition-all"
             >
               Hire This Agent
             </button>
@@ -546,7 +546,7 @@ export default function RequestDetailPage() {
                     <button
                       onClick={handleAcceptDelivery}
                       disabled={buildActionSubmitting}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold bg-acid text-base-900 hover:opacity-90 transition-opacity disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Accept & Release Escrow
@@ -554,7 +554,7 @@ export default function RequestDetailPage() {
                     <button
                       onClick={handleRequestRevision}
                       disabled={buildActionSubmitting}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-medium bg-base-700 text-base-200 hover:bg-base-600 border border-base-600 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       Request Revision
@@ -562,7 +562,7 @@ export default function RequestDetailPage() {
                     <button
                       onClick={() => setShowDisputeInput(true)}
                       disabled={buildActionSubmitting || showDisputeInput}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-50"
                     >
                       <AlertTriangle className="w-3.5 h-3.5" />
                       Dispute

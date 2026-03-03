@@ -62,7 +62,7 @@ function FilterDropdown({ label, icon: Icon, value, options, onChange, open, onT
     <div className="relative" ref={ref}>
       <button
         onClick={() => onToggle(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+        className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-medium transition-all border ${
           value !== options[0]?.label && value !== options[0]?.value
             ? 'bg-violet/10 text-violet-light border-violet/30'
             : 'bg-base-800 text-base-200 border-base-600/50 hover:border-base-500'
@@ -354,7 +354,7 @@ export default function FeedPage() {
                 <div className="flex flex-col items-center gap-0.5 shrink-0 pt-0.5">
                   <button
                     onClick={() => toggleVote(req.id)}
-                    className={`p-1 rounded-md transition-all ${
+                    className={`p-2 rounded-md transition-all ${
                       votedItems.has(req.id)
                         ? 'text-violet-light bg-violet/10'
                         : 'text-base-400 hover:text-white'
@@ -405,8 +405,8 @@ export default function FeedPage() {
                   </div>
 
                   {/* Meta row */}
-                  <div className="flex items-center gap-3 mt-2.5 text-2xs text-base-300">
-                    <span className="text-base-400">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2.5 text-2xs text-base-300">
+                    <span className="text-base-400 truncate max-w-[120px]">
                       by{' '}
                       {req.author_wallet ? (
                         <button

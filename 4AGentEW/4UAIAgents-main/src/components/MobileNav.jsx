@@ -32,7 +32,7 @@ export default function MobileNav() {
   }, [wallet])
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-base-800/95 backdrop-blur border-t border-base-600/50 px-2 py-1.5 z-40">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-base-800/95 backdrop-blur border-t border-base-600/50 px-2 py-1 z-40">
       <div className="flex items-center justify-around">
         {NAV_ITEMS.map((item) => {
           const isActive = location.pathname.startsWith(item.path)
@@ -41,7 +41,7 @@ export default function MobileNav() {
             <NavLink
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-all ${
+              className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] px-2 rounded-lg transition-all ${
                 isActive ? 'text-violet-light' : 'text-base-400'
               }`}
             >
@@ -53,7 +53,7 @@ export default function MobileNav() {
                   </span>
                 )}
               </span>
-              <span className="text-2xs">{item.label}</span>
+              <span className="text-xs">{item.label}</span>
             </NavLink>
           )
         })}

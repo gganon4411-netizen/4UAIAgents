@@ -7,6 +7,9 @@ import { AgentsProvider } from './hooks/useAgents'
 import LandingPage from './components/LandingPage'
 import Onboarding from './components/Onboarding'
 import AppShell from './components/AppShell'
+import PrivacyPage from './components/pages/PrivacyPage'
+import TermsPage from './components/pages/TermsPage'
+import NotionCallbackPage from './components/pages/NotionCallbackPage'
 
 function AppRouter() {
   const { isConnected, session } = useWallet()
@@ -16,6 +19,9 @@ function AppRouter() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/app/notion/callback" element={<NotionCallbackPage />} />
         {!isConnected ? (
           <Route path="*" element={<LandingPage />} />
         ) : !isOnboarded && !hasDisplayNameInSession ? (
